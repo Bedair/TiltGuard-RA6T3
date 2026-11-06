@@ -54,5 +54,9 @@
         <peripheral name="PORT5.CM33" group="PORT">
             <slot name="P500.CM33" secure="true"/>
         </peripheral>
+        <peripheral name="GPT0.CM33" group="GPT" security="s"/>
+        <peripheral name="ICU.CM33">
+            <slot name="IRQ0.CM33" secure="true"/>
+        </peripheral>
     </partition>
 </azone>

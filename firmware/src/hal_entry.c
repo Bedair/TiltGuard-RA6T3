@@ -5,14 +5,23 @@
 */
 
 #include "hal_data.h"
+#include "telemetry/telemetry.h"
+#include "control/control_tick.h"
 
 extern bsp_leds_t g_bsp_leds;
 
+/* 1 kHz tick thresholds: LED1 toggles every 500 ticks (1 Hz), telemetry reports every 1000 ticks (1 Hz). */
+#define LED_BLINK_TICKS   (500U)
+#define REPORT_TICKS      (1000U)
+#define CYCLES_PER_US     (200U) /* Core clock is 200 MHz; see CLAUDE.md. */
+
 /*******************************************************************************************************************//**
- * @brief  Blinky example application
+ * @brief  TiltGuard entry point.
  *
- * Blinks all leds at a rate of 1 second using the software delay function provided by the BSP.
- *
+ * Starts the 1 kHz control tick (GPT0) and runs a non-blocking main loop that
+ * blinks LED1 at 1 Hz and reports tick-timing telemetry once per second.
+ * On any control_tick_init() failure, LED2 is held on and the loop halts in
+ * a safe state rather than running without a trustworthy tick.
  **********************************************************************************************************************/
 void hal_entry (void)
 {
@@ -21,15 +30,6 @@ void hal_entry (void)
     /* Enter non-secure code */
     R_BSP_NonSecureEnter();
 #endif
-
-    /* Define the units to be used with the software delay function */
-    const bsp_delay_units_t bsp_delay_units = BSP_DELAY_UNITS_MILLISECONDS;
-
-    /* Set the blink frequency (must be <= bsp_delay_units / 2) */
-    const uint32_t freq_in_hz = 1;
-
-    /* Calculate the delay in terms of bsp_delay_units */
-    const uint32_t delay = bsp_delay_units / (freq_in_hz * 2);
 
     /* LED type structure */
     bsp_leds_t leds = g_bsp_leds;
@@ -48,47 +48,69 @@ void hal_entry (void)
         }
     }
 
-    /* Holds level to set for pins */
-    bsp_io_level_t pin_level = BSP_IO_LEVEL_LOW;
+    telemetry_init();
+
+    fsp_err_t err = control_tick_init();
+
+    if (FSP_SUCCESS != err)
+    {
+        /* Safe state: no trustworthy tick, so hold LED2 on and stop here rather than run degraded. */
+        R_BSP_PinAccessEnable();
+        R_BSP_PinWrite((bsp_io_port_pin_t) leds.p_leds[1], BSP_IO_LEVEL_HIGH);
+        R_BSP_PinAccessDisable();
+
+        telemetry_printf("control_tick_init failed: err=%d\r\n", (int) err);
+
+        while (1)
+        {
+            ;
+        }
+    }
+
+    bsp_io_level_t led1_level     = BSP_IO_LEVEL_LOW;
+    uint32_t       last_tick_seen = 0U;
+    uint32_t       next_blink_tick  = LED_BLINK_TICKS;
+    uint32_t       next_report_tick = REPORT_TICKS;
+    uint32_t       window_start_cyccnt = DWT->CYCCNT;
 
     while (1)
     {
-        /* Enable access to the PFS registers. If using r_ioport module then register protection is automatically
-         * handled. This code uses BSP IO functions to show how it is used.
-         */
-        R_BSP_PinAccessEnable();
+        uint32_t const tick = control_tick_count();
 
-#if BSP_NUMBER_OF_CORES == 1
-
-        /* Update all board LEDs */
-        for (uint32_t i = 0; i < leds.led_count; i++)
+        if (tick == last_tick_seen)
         {
-            /* Get pin to toggle */
-            uint32_t pin = leds.p_leds[i];
-
-            /* Write to this pin */
-            R_BSP_PinWrite((bsp_io_port_pin_t) pin, pin_level);
-        }
-#else
-
-        /* Update LED that is at the index of this core. */
-        R_BSP_PinWrite((bsp_io_port_pin_t) leds.p_leds[_RA_CORE], pin_level);
-#endif
-
-        /* Protect PFS registers */
-        R_BSP_PinAccessDisable();
-
-        /* Toggle level for next write */
-        if (BSP_IO_LEVEL_LOW == pin_level)
-        {
-            pin_level = BSP_IO_LEVEL_HIGH;
-        }
-        else
-        {
-            pin_level = BSP_IO_LEVEL_LOW;
+            continue;
         }
 
-        /* Delay */
-        R_BSP_SoftwareDelay(delay, bsp_delay_units);
+        last_tick_seen = tick;
+
+        if (tick >= next_blink_tick)
+        {
+            next_blink_tick += LED_BLINK_TICKS;
+
+            led1_level = (BSP_IO_LEVEL_LOW == led1_level) ? BSP_IO_LEVEL_HIGH : BSP_IO_LEVEL_LOW;
+
+            R_BSP_PinAccessEnable();
+            R_BSP_PinWrite((bsp_io_port_pin_t) leds.p_leds[0], led1_level);
+            R_BSP_PinAccessDisable();
+        }
+
+        if (tick >= next_report_tick)
+        {
+            next_report_tick += REPORT_TICKS;
+
+            uint32_t const window_cycles = DWT->CYCCNT - window_start_cyccnt;
+            window_start_cyccnt = DWT->CYCCNT;
+
+            uint32_t min_cycles;
+            uint32_t max_cycles;
+            control_tick_get_interval_stats(&min_cycles, &max_cycles);
+            control_tick_reset_interval_stats();
+
+            telemetry_printf("ticks/s=1000 cycles/1000ticks=%u min_us=%u max_us=%u\r\n",
+                              window_cycles,
+                              min_cycles / CYCLES_PER_US,
+                              max_cycles / CYCLES_PER_US);
+        }
     }
 }
