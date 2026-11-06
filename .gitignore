@@ -1,0 +1,32 @@
+# ---- e² studio / Eclipse build output ----
+Debug/
+Release/
+*.o
+*.d
+*.elf
+*.map
+*.srec
+*.hex
+*.bin
+*.lst
+*.su
+
+# ---- Eclipse workspace metadata (workspace lives outside the repo) ----
+.metadata/
+RemoteSystemsTempFiles/
+
+# ---- Debugger / IDE leftovers ----
+*.jlink
+JLinkLog.txt
+.vscode/
+*.log
+
+# ---- Python tools ----
+__pycache__/
+*.pyc
+.venv/
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
