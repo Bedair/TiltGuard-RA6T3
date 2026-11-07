@@ -6,7 +6,7 @@
         #endif
 /* Number of interrupts allocated */
 #ifndef VECTOR_DATA_IRQ_COUNT
-#define VECTOR_DATA_IRQ_COUNT    (7)
+#define VECTOR_DATA_IRQ_COUNT    (11)
 #endif
 /* ISR prototypes */
 void gpt_counter_overflow_isr(void);
@@ -16,6 +16,8 @@ void i3c_rx_isr(void);
 void i3c_tx_isr(void);
 void i3c_ibi_isr(void);
 void i3c_eei_isr(void);
+void r_icu_isr(void);
+void adc_scan_end_isr(void);
 
 /* Vector table allocations */
 #define VECTOR_NUMBER_GPT0_COUNTER_OVERFLOW ((IRQn_Type) 0) /* GPT0 COUNTER OVERFLOW (Overflow) */
@@ -32,8 +34,16 @@ void i3c_eei_isr(void);
 #define I3C0_IBI_IRQn          ((IRQn_Type) 5) /* I3C0 IBI (IBI status buffer full) */
 #define VECTOR_NUMBER_I3C0_EEI ((IRQn_Type) 6) /* I3C0 EEI (Error) */
 #define I3C0_EEI_IRQn          ((IRQn_Type) 6) /* I3C0 EEI (Error) */
+#define VECTOR_NUMBER_ICU_IRQ7 ((IRQn_Type) 7) /* ICU IRQ7 (External pin interrupt 7) */
+#define ICU_IRQ7_IRQn          ((IRQn_Type) 7) /* ICU IRQ7 (External pin interrupt 7) */
+#define VECTOR_NUMBER_ICU_IRQ1 ((IRQn_Type) 8) /* ICU IRQ1 (External pin interrupt 1) */
+#define ICU_IRQ1_IRQn          ((IRQn_Type) 8) /* ICU IRQ1 (External pin interrupt 1) */
+#define VECTOR_NUMBER_ICU_IRQ5 ((IRQn_Type) 9) /* ICU IRQ5 (External pin interrupt 5) */
+#define ICU_IRQ5_IRQn          ((IRQn_Type) 9) /* ICU IRQ5 (External pin interrupt 5) */
+#define VECTOR_NUMBER_ADC0_SCAN_END ((IRQn_Type) 10) /* ADC0 SCAN END (End of A/D scanning operation) */
+#define ADC0_SCAN_END_IRQn          ((IRQn_Type) 10) /* ADC0 SCAN END (End of A/D scanning operation) */
 /* The number of entries required for the ICU vector table. */
-#define BSP_ICU_VECTOR_NUM_ENTRIES (7)
+#define BSP_ICU_VECTOR_NUM_ENTRIES (11)
 
 #ifdef __cplusplus
         }

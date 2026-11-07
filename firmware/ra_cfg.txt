@@ -116,8 +116,8 @@ FSP Configuration
       P015 52 GPIO PMOD2_GPIO1 - None "Input mode" - - "ACMPHS0: IVCMP0; ADC0: AN013; DAC121: DA1; IRQ: IRQ13" - IO - - 
       P100 48 I3C/IIC_I3C_SCL I3C_SCL_ARDUINO_SCL H None "Peripheral mode" - - "AGT0: AGTIO0; GPT5: GTIOC5B; GPT_POEGA: GTETRGA; I3C/IIC: I3C_SCL; IRQ: IRQ2; SCI0: RXD0; SPI1: MISO1" - IO - - 
       P101 47 I3C/IIC_I3C_SDA I3C_SDA_ARDUINO_SDA H None "Peripheral mode" - - "AGT0: AGTEE0; GPT5: GTIOC5A; GPT_POEGB: GTETRGB; I3C/IIC: I3C_SDA; IRQ: IRQ1; SCI0: TXD0; SPI1: MOSI1" - IO - - 
-      P102 46 SCI0_SCK0 PMOD2_SCK H - "Peripheral mode" - - "ADC0(Digital): ADTRG0; AGT0: AGTO0; CANFD0: CRX0; GPT2: GTIOC2B; GPT_OPS: GTOWLO; SCI0: SCK0; SPI1: RSPCK1" - IO - - 
-      P103 45 SCI0_CTS_RTS0 PMOD2_SSLB0_CTS0 L - "Peripheral mode" - - "CANFD0: CTX0; GPT2: GTIOC2A; GPT_OPS: GTOWUP; SCI0: CTS_RTS0; SPI1: SSLB0" - IO - - 
+      P102 46 - PMOD2_SCK - - Disabled - - "ADC0(Digital): ADTRG0; AGT0: AGTO0; CANFD0: CRX0; GPT2: GTIOC2B; GPT_OPS: GTOWLO; SCI0: SCK0; SPI1: RSPCK1" - None - - 
+      P103 45 - PMOD2_SSLB0_CTS0 - - Disabled - - "CANFD0: CTX0; GPT2: GTIOC2A; GPT_OPS: GTOWUP; SCI0: CTS_RTS0; SPI1: SSLB0" - None - - 
       P104 44 - - - - Disabled - - "AGT1: AGTIO1; GPT1: GTIOC1B; GPT_POEGB: GTETRGB; IRQ: IRQ1; SPI1: SSLB1" - None - - 
       P105 43 GPIO ARDUINO_D2 - IRQ0 "Input mode" - - "GPT1: GTIOC1A; GPT_POEGA: GTETRGA; IRQ: IRQ0; SPI1: SSLB2" - IO - - 
       P106 42 GPIO PMOD1_GPIO2 - - "Input mode" - - "AGT0: AGTOB0; SPI1: SSLB3" - IO - - 
@@ -148,8 +148,8 @@ FSP Configuration
       P407 16 GPIO PMOD2_RESET - - "Input mode" - - "ADC0(Digital): ADTRG0; AGT0: AGTIO0; GPT: GTADSM0; GPT_OPS: GTIV; I3C/IIC: SDA0; USB FS: USB_VBUS" - IO - - 
       P408 15 GPIO ARDUINO_D3 - IRQ7 "Input mode" - - "AGT1: AGTOB1; GPT1: GTIOC1B; GPT_OPS: GTIW; I3C/IIC: SCL0; IRQ: IRQ7" - IO - - 
       P409 14 GPIO ARDUINO_D5 - None "Input mode" - - "AGT1: AGTOA1; GPT1: GTIOC1A; GPT_OPS: GTOWUP; IRQ: IRQ6" - IO - - 
-      P410 13 SCI0_RXD0 PMOD2_MISO_ARDUINO_D0 H None "Peripheral mode" - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - I - - 
-      P411 12 SCI0_TXD0 PMOD2_MOSI_ARDUINO_D1 H None "Peripheral mode" - - "GPT_OPS: GTOVUP; IRQ: IRQ4; SCI0: TXD0" - O - - 
+      P410 13 GPIO PMOD2_MISO_ARDUINO_D0 - IRQ5 "Input mode" - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - IO - - 
+      P411 12 - PMOD2_MOSI_ARDUINO_D1 - - Disabled - - "GPT_OPS: GTOVUP; IRQ: IRQ4; SCI0: TXD0" - None - - 
       P500 49 GPIO ARDUINO_D4 - - "Input mode" - - "ACMPHS0: IVREF0; ADC0: AN016; AGT0: AGTOA0; CAC: CACREF; GPT_OPS: GTIU" - IO - - 
       P814 19 - - - - Disabled - - "GPT0: GTIOC0B; GPT_POEGB: GTETRGB; USB FS: USB_DP" - None - - 
       P815 18 - - - - Disabled - - "GPT0: GTIOC0A; GPT_POEGC: GTETRGC; USB FS: USB_DM" - None - - 
@@ -181,8 +181,8 @@ FSP Configuration
       P015 52 - PMOD2_GPIO1 - None Disabled - - "ACMPHS0: IVCMP0; ADC0: AN013; DAC121: DA1; IRQ: IRQ13" - IO - - 
       P100 48 - I3C_SCL_ARDUINO_SCL L None Disabled - - "AGT0: AGTIO0; GPT5: GTIOC5B; GPT_POEGA: GTETRGA; I3C/IIC: I3C_SCL; IRQ: IRQ2; SCI0: RXD0; SPI1: MISO1" - IO - - 
       P101 47 - I3C_SDA_ARDUINO_SDA L None Disabled - - "AGT0: AGTEE0; GPT5: GTIOC5A; GPT_POEGB: GTETRGB; I3C/IIC: I3C_SDA; IRQ: IRQ1; SCI0: TXD0; SPI1: MOSI1" - IO - - 
-      P102 46 - PMOD2_SCK L - Disabled - - "ADC0(Digital): ADTRG0; AGT0: AGTO0; CANFD0: CRX0; GPT2: GTIOC2B; GPT_OPS: GTOWLO; SCI0: SCK0; SPI1: RSPCK1" - IO - - 
-      P103 45 - PMOD2_SSLB0_CTS0 L - Disabled - - "CANFD0: CTX0; GPT2: GTIOC2A; GPT_OPS: GTOWUP; SCI0: CTS_RTS0; SPI1: SSLB0" - IO - - 
+      P102 46 - PMOD2_SCK - - Disabled - - "ADC0(Digital): ADTRG0; AGT0: AGTO0; CANFD0: CRX0; GPT2: GTIOC2B; GPT_OPS: GTOWLO; SCI0: SCK0; SPI1: RSPCK1" - None - - 
+      P103 45 - PMOD2_SSLB0_CTS0 - - Disabled - - "CANFD0: CTX0; GPT2: GTIOC2A; GPT_OPS: GTOWUP; SCI0: CTS_RTS0; SPI1: SSLB0" - None - - 
       P104 44 - - - - Disabled - - "AGT1: AGTIO1; GPT1: GTIOC1B; GPT_POEGB: GTETRGB; IRQ: IRQ1; SPI1: SSLB1" - None - - 
       P105 43 - ARDUINO_D2 - None Disabled - - "GPT1: GTIOC1A; GPT_POEGA: GTETRGA; IRQ: IRQ0; SPI1: SSLB2" - IO - - 
       P106 42 - PMOD1_GPIO2 - - Disabled - - "AGT0: AGTOB0; SPI1: SSLB3" - IO - - 
@@ -213,8 +213,8 @@ FSP Configuration
       P407 16 - PMOD2_RESET - - Disabled - - "ADC0(Digital): ADTRG0; AGT0: AGTIO0; GPT: GTADSM0; GPT_OPS: GTIV; I3C/IIC: SDA0; USB FS: USB_VBUS" - IO - - 
       P408 15 - ARDUINO_D3 - None Disabled - - "AGT1: AGTOB1; GPT1: GTIOC1B; GPT_OPS: GTIW; I3C/IIC: SCL0; IRQ: IRQ7" - IO - - 
       P409 14 - ARDUINO_D5 - None Disabled - - "AGT1: AGTOA1; GPT1: GTIOC1A; GPT_OPS: GTOWUP; IRQ: IRQ6" - IO - - 
-      P410 13 - PMOD2_MISO_ARDUINO_D0 L None Disabled - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - I - - 
-      P411 12 - PMOD2_MOSI_ARDUINO_D1 L None Disabled - - "GPT_OPS: GTOVUP; IRQ: IRQ4; SCI0: TXD0" - O - - 
+      P410 13 - PMOD2_MISO_ARDUINO_D0 - None Disabled - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - IO - - 
+      P411 12 - PMOD2_MOSI_ARDUINO_D1 - - Disabled - - "GPT_OPS: GTOVUP; IRQ: IRQ4; SCI0: TXD0" - None - - 
       P500 49 - ARDUINO_D4 - - Disabled - - "ACMPHS0: IVREF0; ADC0: AN016; AGT0: AGTOA0; CAC: CACREF; GPT_OPS: GTIU" - IO - - 
       P814 19 - - - - Disabled - - "GPT0: GTIOC0B; GPT_POEGB: GTETRGB; USB FS: USB_DP" - None - - 
       P815 18 - - - - Disabled - - "GPT0: GTIOC0A; GPT_POEGC: GTETRGC; USB FS: USB_DM" - None - - 
@@ -255,6 +255,12 @@ FSP Configuration
     Master Support: Enabled
     Slave Support: Enabled
     Error Recovery Procedure: Support Error Recovery Version 2 Only.
+    
+  Module "External IRQ (r_icu)"
+    Parameter Checking: Default (BSP)
+    
+  Module "ADC (r_adc)"
+    Parameter Checking: Default (BSP)
     
   HAL
     Instance "g_ioport I/O Port (r_ioport)"
@@ -378,4 +384,71 @@ FSP Configuration
       Slave Mode: Command Response Info: GETCAP/GETHDRCAP: HDR-TSL (Mode 2): Not Supported
       Interrupts: Interrupt Priority: Priority 5
       Interrupts: Error and Event Interrupt Priority: Priority 5
+      
+    Instance "g_irq_encoder_left External IRQ (r_icu)"
+      Name: g_irq_encoder_left
+      Channel: 7
+      Trigger: Both Edges
+      Digital Filtering: Disabled
+      Filter Source: PCLK filter
+      Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
+      Callback: encoder_left_isr
+      Pin Interrupt Priority: Priority 3
+      
+    Instance "g_irq_encoder_right External IRQ (r_icu)"
+      Name: g_irq_encoder_right
+      Channel: 1
+      Trigger: Both Edges
+      Digital Filtering: Disabled
+      Filter Source: PCLK filter
+      Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
+      Callback: encoder_right_isr
+      Pin Interrupt Priority: Priority 3
+      
+    Instance "g_irq_echo External IRQ (r_icu)"
+      Name: g_irq_echo
+      Channel: 5
+      Trigger: Both Edges
+      Digital Filtering: Disabled
+      Filter Source: PCLK filter
+      Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
+      Callback: ultrasonic_echo_isr
+      Pin Interrupt Priority: Priority 4
+      
+    Instance "g_adc_battery ADC (r_adc)"
+      General: Name: g_adc_battery
+      General: Unit: 0
+      General: Resolution: 12-Bit
+      General: Alignment: Right
+      General: Clear after read: On
+      General: Mode: Single Scan
+      General: Double-trigger: Disabled
+      Input: Channel Scan Mask (channel availability varies by MCU): Channel 2
+      Input: Group B Scan Mask (channel availability varies by MCU): 
+      Interrupts: Normal/Group A Trigger: Software
+      Interrupts: Group B Trigger: Disabled
+      Interrupts: Group Priority (Valid only in Group Scan Mode): Group A cannot interrupt Group B
+      Input: Add/Average Count: Disabled
+      Input: Reference Voltage control: VREFH0/VREFH
+      Input: Addition/Averaging Mask (channel availability varies by MCU and unit): 
+      Input: Sample and Hold: Sample and Hold Channels (Available only on selected MCUs): 
+      Input: Sample and Hold: Sample Hold States (Applies only to channels 0, 1, 2): 24
+      Input: Window Compare: Window Mode: Disabled
+      Input: Window Compare: Event Output: OR
+      Input: Window Compare: Window A: Enable: Disabled
+      Input: Window Compare: Window A: Channels to compare (channel availability varies by MCU and unit): 
+      Input: Window Compare: Window A: Channel comparison mode (channel availability varies by MCU and unit): 
+      Input: Window Compare: Window A: Lower Reference: 0
+      Input: Window Compare: Window A: Upper Reference: 0
+      Input: Window Compare: Window B: Enable: Disabled
+      Input: Window Compare: Window B: Channel to compare (channel availability varies by MCU and unit): Channel 0
+      Input: Window Compare: Window B: Comparison mode: Less Than or Outside Window
+      Input: Window Compare: Window B: Lower Reference: 0
+      Input: Window Compare: Window B: Upper Reference: 0
+      Interrupts: Callback: battery_adc_callback
+      Interrupts: Scan End Interrupt Priority: Priority 6
+      Interrupts: Scan End Group B Interrupt Priority: Disabled
+      Interrupts: Window Compare A Interrupt Priority: Disabled
+      Interrupts: Window Compare B Interrupt Priority: Disabled
+      Extra: ADC Ring Buffer: Disabled
       

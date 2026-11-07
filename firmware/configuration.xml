@@ -198,8 +198,16 @@
       <description>General PWM Timer</description>
       <originalPack>Renesas.RA.6.6.0.pack</originalPack>
     </component>
+    <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_adc" variant="" vendor="Renesas" version="6.6.0">
+      <description>A/D Converter</description>
+      <originalPack>Renesas.RA.6.6.0.pack</originalPack>
+    </component>
     <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_i3c" variant="" vendor="Renesas" version="6.6.0">
       <description>I3C</description>
+      <originalPack>Renesas.RA.6.6.0.pack</originalPack>
+    </component>
+    <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_icu" variant="" vendor="Renesas" version="6.6.0">
+      <description>External Interrupt</description>
       <originalPack>Renesas.RA.6.6.0.pack</originalPack>
     </component>
   </raComponentSelection>
@@ -329,11 +337,85 @@
       <property id="module.driver.i3c.ipl" value="board.icu.common.irq.priority5"/>
       <property id="module.driver.i3c.eei_ipl" value="board.icu.common.irq.priority5"/>
     </module>
+    <module id="module.driver.external_irq_on_icu.1224444696">
+      <property id="module.driver.external_irq.name" value="g_irq_encoder_left"/>
+      <property id="module.driver.external_irq.channel" value="7"/>
+      <property id="module.driver.external_irq.trigger" value="module.driver.external_irq.trigger.trig_both_edge"/>
+      <property id="module.driver.external_irq.filter_enable" value="module.driver.external_irq.filter_enable.false"/>
+      <property id="module.driver.external_irq.filter_source" value="module.driver.external_irq.filter_source.pclk"/>
+      <property id="module.driver.external_irq.clock_source_div" value="module.driver.external_irq.clock_source_div.clock_source_div_by_64"/>
+      <property id="module.driver.external_irq.p_callback" value="encoder_left_isr"/>
+      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority3"/>
+    </module>
+    <module id="module.driver.external_irq_on_icu.1845939977">
+      <property id="module.driver.external_irq.name" value="g_irq_encoder_right"/>
+      <property id="module.driver.external_irq.channel" value="1"/>
+      <property id="module.driver.external_irq.trigger" value="module.driver.external_irq.trigger.trig_both_edge"/>
+      <property id="module.driver.external_irq.filter_enable" value="module.driver.external_irq.filter_enable.false"/>
+      <property id="module.driver.external_irq.filter_source" value="module.driver.external_irq.filter_source.pclk"/>
+      <property id="module.driver.external_irq.clock_source_div" value="module.driver.external_irq.clock_source_div.clock_source_div_by_64"/>
+      <property id="module.driver.external_irq.p_callback" value="encoder_right_isr"/>
+      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority3"/>
+    </module>
+    <module id="module.driver.external_irq_on_icu.1837300551">
+      <property id="module.driver.external_irq.name" value="g_irq_echo"/>
+      <property id="module.driver.external_irq.channel" value="5"/>
+      <property id="module.driver.external_irq.trigger" value="module.driver.external_irq.trigger.trig_both_edge"/>
+      <property id="module.driver.external_irq.filter_enable" value="module.driver.external_irq.filter_enable.false"/>
+      <property id="module.driver.external_irq.filter_source" value="module.driver.external_irq.filter_source.pclk"/>
+      <property id="module.driver.external_irq.clock_source_div" value="module.driver.external_irq.clock_source_div.clock_source_div_by_64"/>
+      <property id="module.driver.external_irq.p_callback" value="ultrasonic_echo_isr"/>
+      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority4"/>
+    </module>
+    <module id="module.driver.adc_on_adc.1486887160">
+      <property id="module.driver.adc.name" value="g_adc_battery"/>
+      <property id="module.driver.adc.unit" value="0"/>
+      <property id="module.driver.adc.resolution" value="module.driver.adc.resolution.resolution_12_bit"/>
+      <property id="module.driver.adc.alignment" value="module.driver.adc.alignment.alignment_right"/>
+      <property id="module.driver.adc.clearing" value="module.driver.adc.clearing.clear_after_read_on"/>
+      <property id="module.driver.adc.mode" value="module.driver.adc.mode.mode_single_scan"/>
+      <property id="module.driver.adc.mode.dt" value="module.driver.adc.mode.dt.disabled"/>
+      <property id="module.driver.adc.scan_mask" value="module.driver.adc.scan_mask.channel_2"/>
+      <property id="module.driver.adc.scan_mask_group_b" value=""/>
+      <property id="module.driver.adc.trigger" value="enum.driver.adc.trigger.trigger_software"/>
+      <property id="module.driver.adc.trigger_group_b" value="_disabled"/>
+      <property id="module.driver.adc.priority_group_a" value="module.driver.adc.priority_group_a.group_a_priority_off"/>
+      <property id="module.driver.adc.add_average_count" value="module.driver.adc.add_average_count.add_off"/>
+      <property id="module.driver.adc.adc_vref_control" value="module.driver.adc.adc_vref_control.vrefh"/>
+      <property id="module.driver.adc.add_mask" value=""/>
+      <property id="module.driver.adc.sample_hold_mask" value=""/>
+      <property id="module.driver.adc.sample_hold_states" value="24"/>
+      <property id="module.driver.adc.compare.window_mode" value="module.driver.adc.compare.window_mode.disabled"/>
+      <property id="module.driver.adc.compare.event_mode" value="module.driver.adc.compare.event_mode.or"/>
+      <property id="module.driver.adc.compare.window_a.enable" value="module.driver.adc.compare.window_a.enable.disabled"/>
+      <property id="module.driver.adc.compare.window_a.channels" value=""/>
+      <property id="module.driver.adc.compare.window_a.channel_mode" value=""/>
+      <property id="module.driver.adc.compare.window_a.ref_lower" value="0"/>
+      <property id="module.driver.adc.compare.window_a.ref_upper" value="0"/>
+      <property id="module.driver.adc.compare.window_b.enable" value="module.driver.adc.compare.window_b.enable.disabled"/>
+      <property id="module.driver.adc.compare.window_b.channel" value="module.driver.adc.compare.window_b.channel.channel_0"/>
+      <property id="module.driver.adc.compare.window_b.mode" value="module.driver.adc.compare.window_b.mode.less_outside"/>
+      <property id="module.driver.adc.compare.window_b.ref_lower" value="0"/>
+      <property id="module.driver.adc.compare.window_b.ref_upper" value="0"/>
+      <property id="module.driver.adc.p_callback" value="battery_adc_callback"/>
+      <property id="module.driver.adc.scan_end_ipl" value="board.icu.common.irq.priority6"/>
+      <property id="module.driver.adc.scan_end_b_ipl" value="_disabled"/>
+      <property id="module.driver.adc.window_a_ipl" value="_disabled"/>
+      <property id="module.driver.adc.window_b_ipl" value="_disabled"/>
+      <property id="module.driver.adc.adbuf" value="module.driver.adc.adbuf.disabled"/>
+    </module>
     <context id="_hal.0">
       <stack module="module.driver.ioport_on_ioport.0"/>
       <stack module="module.driver.timer_on_gpt.292547005"/>
       <stack module="module.driver.i3c_on_i3c.591461561"/>
+      <stack module="module.driver.external_irq_on_icu.1224444696"/>
+      <stack module="module.driver.external_irq_on_icu.1845939977"/>
+      <stack module="module.driver.external_irq_on_icu.1837300551"/>
+      <stack module="module.driver.adc_on_adc.1486887160"/>
     </context>
+    <config id="config.driver.adc">
+      <property id="config.driver.adc.param_checking_enable" value="config.driver.adc.param_checking_enable.bsp"/>
+    </config>
     <config id="config.driver.gpt">
       <property id="config.driver.gpt.param_checking_enable" value="config.driver.gpt.param_checking_enable.bsp"/>
       <property id="config.driver.gpt.output_support_enable" value="config.driver.gpt.output_support_enable.disabled"/>
@@ -342,6 +424,9 @@
     <config id="config.driver.ioport">
       <property id="config.driver.ioport.checking" value="config.driver.ioport.checking.system"/>
       <property id="config.driver.ioport.ccd_support_enable" value="config.driver.ioport.ccd_support_enable.disabled"/>
+    </config>
+    <config id="config.driver.icu">
+      <property id="config.driver.icu.param_checking_enable" value="config.driver.icu.param_checking_enable.bsp"/>
     </config>
     <config id="config.driver.i3c">
       <property id="config.driver.i3c.param_checking_enable" value="config.driver.i3c.param_checking_enable.bsp"/>
@@ -442,11 +527,6 @@
       <configSetting altId="p101.i3c_fslash_iic.i3c_sda" configurationId="p101"/>
       <configSetting altId="p101.gpio_speed.gpio_speed_h" configurationId="p101.gpio_drivecapacity"/>
       <configSetting altId="p101.gpio_mode.gpio_mode_peripheral" configurationId="p101.gpio_mode"/>
-      <configSetting altId="p102.sci0.sck0" configurationId="p102"/>
-      <configSetting altId="p102.gpio_speed.gpio_speed_h" configurationId="p102.gpio_drivecapacity"/>
-      <configSetting altId="p102.gpio_mode.gpio_mode_peripheral" configurationId="p102.gpio_mode"/>
-      <configSetting altId="p103.sci0.cts_rts0" configurationId="p103"/>
-      <configSetting altId="p103.gpio_mode.gpio_mode_peripheral" configurationId="p103.gpio_mode"/>
       <configSetting altId="p105.input" configurationId="p105"/>
       <configSetting altId="p105.gpio_irq.gpio_irq_enabled" configurationId="p105.gpio_irq"/>
       <configSetting altId="p105.gpio_mode.gpio_mode_in" configurationId="p105.gpio_mode"/>
@@ -502,19 +582,11 @@
       <configSetting altId="p408.gpio_mode.gpio_mode_in" configurationId="p408.gpio_mode"/>
       <configSetting altId="p409.input" configurationId="p409"/>
       <configSetting altId="p409.gpio_mode.gpio_mode_in" configurationId="p409.gpio_mode"/>
-      <configSetting altId="p410.sci0.rxd0" configurationId="p410"/>
-      <configSetting altId="p410.gpio_speed.gpio_speed_h" configurationId="p410.gpio_drivecapacity"/>
-      <configSetting altId="p410.gpio_mode.gpio_mode_peripheral" configurationId="p410.gpio_mode"/>
-      <configSetting altId="p411.sci0.txd0" configurationId="p411"/>
-      <configSetting altId="p411.gpio_speed.gpio_speed_h" configurationId="p411.gpio_drivecapacity"/>
-      <configSetting altId="p411.gpio_mode.gpio_mode_peripheral" configurationId="p411.gpio_mode"/>
+      <configSetting altId="p410.input" configurationId="p410"/>
+      <configSetting altId="p410.gpio_irq.gpio_irq_enabled" configurationId="p410.gpio_irq"/>
+      <configSetting altId="p410.gpio_mode.gpio_mode_in" configurationId="p410.gpio_mode"/>
       <configSetting altId="p500.input" configurationId="p500"/>
       <configSetting altId="p500.gpio_mode.gpio_mode_in" configurationId="p500.gpio_mode"/>
-      <configSetting altId="sci0.cts_rts0.p103" configurationId="sci0.cts_rts0"/>
-      <configSetting altId="sci0.mode.simplespi.free" configurationId="sci0.mode"/>
-      <configSetting altId="sci0.rxd0.p410" configurationId="sci0.rxd0"/>
-      <configSetting altId="sci0.sck0.p102" configurationId="sci0.sck0"/>
-      <configSetting altId="sci0.txd0.p411" configurationId="sci0.txd0"/>
       <configSetting altId="sci9.mode.simplei2c.b" configurationId="sci9.mode"/>
       <configSetting altId="sci9.pairing.b" configurationId="sci9.pairing"/>
       <configSetting altId="sci9.rxd9.p110" configurationId="sci9.rxd9"/>
