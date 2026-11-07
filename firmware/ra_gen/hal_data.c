@@ -1,6 +1,70 @@
 /* generated HAL source file - do not edit */
 #include "hal_data.h"
 
+/* Control structure for storing the driver's internal state. */
+i3c_instance_ctrl_t g_i3c_imu_ctrl;
+
+/* Extended configuration for this instance of I3C. */
+const i3c_extended_cfg_t g_i3c_imu_cfg_extend =
+        { .bitrate_settings =
+        {
+        /* Standard Open Drain; Actual Frequency (Hz): 400000, Actual High Period (ns): 160. */
+        .stdbr = ((16U << R_I3C0_STDBR_SBRHO_Pos) | (234U << R_I3C0_STDBR_SBRLO_Pos))
+        /* Standard Push-Pull; Actual Frequency (Hz): 3333333.3, Actual High Period (ns): 160. */
+        | ((16U << R_I3C0_STDBR_SBRHP_Pos) | (14U << R_I3C0_STDBR_SBRLP_Pos)) | (0U << R_I3C0_STDBR_DSBRPO_Pos),
+          /* Extended Open Drain; Actual Frequency (Hz): 1000000, Actual High Period (ns): 160. */
+          .extbr = ((16U << R_I3C0_EXTBR_EBRHO_Pos) | (84U << R_I3C0_EXTBR_EBRLO_Pos))
+          /* Extended Push-Pull; Actual Frequency (Hz): 3333333.3, Actual High Period (ns): 160.  */
+          | ((16U << R_I3C0_EXTBR_EBRHP_Pos) | (14U << R_I3C0_EXTBR_EBRLP_Pos)),
+
+          .scstlctl_b =
+          { .clock_stalling_time = 0,
+            .assigned_address_phase_enable = 0,
+            .transition_phase_enable = 0,
+            .parity_phase_enable = 0,
+            .ack_phase_enable = 0, }, },
+          .ibi_control.hot_join_acknowledge = 0, .ibi_control.notify_rejected_hot_join_requests = 0, .ibi_control.notify_rejected_mastership_requests =
+                  0,
+          .ibi_control.notify_rejected_interrupt_requests = 0, .bus_free_detection_time = 4, .bus_available_detection_time =
+                  100,
+          .bus_idle_detection_time = 100000, .timeout_detection_enable = false, .slave_command_response_info =
+          { .inband_interrupt_enable = false,
+            .mastership_request_enable = 0,
+            .hotjoin_request_enable = false,
+            .activity_state = I3C_ACTIVITY_STATE_ENTAS0,
+            .write_length = 65535,
+            .read_length = 65535,
+            .ibi_payload_length = 0,
+            .write_data_rate = I3C_DATA_RATE_SETTING_2MHZ,
+            .read_data_rate = I3C_DATA_RATE_SETTING_2MHZ,
+            .clock_data_turnaround = I3C_CLOCK_DATA_TURNAROUND_8NS,
+            .read_turnaround_time_enable = false,
+            .read_turnaround_time = 0,
+            .oscillator_frequency = 0,
+            .oscillator_inaccuracy = 0,
+            .hdr_ddr_support = false,
+            .hdr_tsp_support = false,
+            .hdr_tsl_support = false, },
+          .resp_irq = VECTOR_NUMBER_I3C0_RESPONSE, .rcv_irq = VECTOR_NUMBER_I3C0_RCV_STATUS, .rx_irq =
+                  VECTOR_NUMBER_I3C0_RX,
+          .tx_irq = VECTOR_NUMBER_I3C0_TX, .ibi_irq = VECTOR_NUMBER_I3C0_IBI, .eei_irq = VECTOR_NUMBER_I3C0_EEI,
+
+          .ipl = (5),
+          .eei_ipl = (5), };
+
+/* Configuration for this instance. */
+const i3c_cfg_t g_i3c_imu_cfg =
+{ .channel = 0, .device_type = I3C_DEVICE_TYPE_MAIN_MASTER, .p_callback = mpu6050_i3c_callback,
+#if defined(NULL)
+    .p_context = NULL,
+#else
+  .p_context = (void*) &NULL,
+#endif
+  .p_extend = &g_i3c_imu_cfg_extend, };
+
+/* Instance structure to use this module. */
+const i3c_instance_t g_i3c_imu =
+{ .p_ctrl = &g_i3c_imu_ctrl, .p_cfg = &g_i3c_imu_cfg, .p_api = &g_i3c_on_i3c };
 gpt_instance_ctrl_t g_timer_control_tick_ctrl;
 #if 0
 const gpt_extended_pwm_cfg_t g_timer_control_tick_pwm_extend =

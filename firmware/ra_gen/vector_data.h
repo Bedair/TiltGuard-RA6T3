@@ -6,16 +6,34 @@
         #endif
 /* Number of interrupts allocated */
 #ifndef VECTOR_DATA_IRQ_COUNT
-#define VECTOR_DATA_IRQ_COUNT    (1)
+#define VECTOR_DATA_IRQ_COUNT    (7)
 #endif
 /* ISR prototypes */
 void gpt_counter_overflow_isr(void);
+void i3c_rcv_isr(void);
+void i3c_resp_isr(void);
+void i3c_rx_isr(void);
+void i3c_tx_isr(void);
+void i3c_ibi_isr(void);
+void i3c_eei_isr(void);
 
 /* Vector table allocations */
 #define VECTOR_NUMBER_GPT0_COUNTER_OVERFLOW ((IRQn_Type) 0) /* GPT0 COUNTER OVERFLOW (Overflow) */
 #define GPT0_COUNTER_OVERFLOW_IRQn          ((IRQn_Type) 0) /* GPT0 COUNTER OVERFLOW (Overflow) */
+#define VECTOR_NUMBER_I3C0_RCV_STATUS ((IRQn_Type) 1) /* I3C0 RCV STATUS (Receive status buffer full) */
+#define I3C0_RCV_STATUS_IRQn          ((IRQn_Type) 1) /* I3C0 RCV STATUS (Receive status buffer full) */
+#define VECTOR_NUMBER_I3C0_RESPONSE ((IRQn_Type) 2) /* I3C0 RESPONSE (Response status buffer full) */
+#define I3C0_RESPONSE_IRQn          ((IRQn_Type) 2) /* I3C0 RESPONSE (Response status buffer full) */
+#define VECTOR_NUMBER_I3C0_RX ((IRQn_Type) 3) /* I3C0 RX (Receive) */
+#define I3C0_RX_IRQn          ((IRQn_Type) 3) /* I3C0 RX (Receive) */
+#define VECTOR_NUMBER_I3C0_TX ((IRQn_Type) 4) /* I3C0 TX (Transmit) */
+#define I3C0_TX_IRQn          ((IRQn_Type) 4) /* I3C0 TX (Transmit) */
+#define VECTOR_NUMBER_I3C0_IBI ((IRQn_Type) 5) /* I3C0 IBI (IBI status buffer full) */
+#define I3C0_IBI_IRQn          ((IRQn_Type) 5) /* I3C0 IBI (IBI status buffer full) */
+#define VECTOR_NUMBER_I3C0_EEI ((IRQn_Type) 6) /* I3C0 EEI (Error) */
+#define I3C0_EEI_IRQn          ((IRQn_Type) 6) /* I3C0 EEI (Error) */
 /* The number of entries required for the ICU vector table. */
-#define BSP_ICU_VECTOR_NUM_ENTRIES (1)
+#define BSP_ICU_VECTOR_NUM_ENTRIES (7)
 
 #ifdef __cplusplus
         }

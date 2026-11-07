@@ -4,6 +4,7 @@
 
 #include "control_tick.h"
 #include "hal_data.h"
+#include "../imu/mpu6050.h"
 
 static volatile uint32_t s_tick_count          = 0U;
 static volatile uint32_t s_previous_cyccnt      = 0U;
@@ -87,4 +88,6 @@ void control_tick_isr (timer_callback_args_t * p_args)
     }
 
     s_tick_count++;
+
+    mpu6050_on_tick();
 }

@@ -127,7 +127,7 @@
     <node id="board.clock.clkout.source" option="board.clock.clkout.source.disabled"/>
     <node id="board.clock.uclk.source" option="board.clock.uclk.source.disabled"/>
     <node id="board.clock.canfdclk.source" option="board.clock.canfdclk.source.disabled"/>
-    <node id="board.clock.i3cclk.source" option="board.clock.i3cclk.source.disabled"/>
+    <node id="board.clock.i3cclk.source" option="board.clock.i3cclk.source.pll"/>
     <node id="board.clock.iclk.div" option="board.clock.iclk.div.1"/>
     <node id="board.clock.pclka.div" option="board.clock.pclka.div.2"/>
     <node id="board.clock.pclkb.div" option="board.clock.pclkb.div.4"/>
@@ -137,7 +137,7 @@
     <node id="board.clock.clkout.div" option="board.clock.clkout.div.1"/>
     <node id="board.clock.uclk.div" option="board.clock.uclk.div.5"/>
     <node id="board.clock.canfdclk.div" option="board.clock.canfdclk.div.6"/>
-    <node id="board.clock.i3cclk.div" option="board.clock.i3cclk.div.1"/>
+    <node id="board.clock.i3cclk.div" option="board.clock.i3cclk.div.2"/>
     <node id="board.clock.iclk.display" option="board.clock.iclk.display.value"/>
     <node id="board.clock.pclka.display" option="board.clock.pclka.display.value"/>
     <node id="board.clock.pclkb.display" option="board.clock.pclkb.display.value"/>
@@ -196,6 +196,10 @@
     </component>
     <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_gpt" variant="" vendor="Renesas" version="6.6.0">
       <description>General PWM Timer</description>
+      <originalPack>Renesas.RA.6.6.0.pack</originalPack>
+    </component>
+    <component apiversion="" class="HAL Drivers" condition="" group="all" subgroup="r_i3c" variant="" vendor="Renesas" version="6.6.0">
+      <description>I3C</description>
       <originalPack>Renesas.RA.6.6.0.pack</originalPack>
     </component>
   </raComponentSelection>
@@ -277,9 +281,58 @@
       <property id="module.driver.timer.gtioca_disable_setting" value="module.driver.timer.gtioca_disable_setting.gtioc_disable_prohibited"/>
       <property id="module.driver.timer.gtiocb_disable_setting" value="module.driver.timer.gtiocb_disable_setting.gtioc_disable_prohibited"/>
     </module>
+    <module id="module.driver.i3c_on_i3c.591461561">
+      <property id="module.driver.i3c.name" value="g_i3c_imu"/>
+      <property id="module.driver.i3c.p_callback" value="mpu6050_i3c_callback"/>
+      <property id="module.driver.i3c.device_type" value="module.driver.i3c.device_type.main_master"/>
+      <property id="module.driver.i3c.stdbr.opendrain.logic_high" value="167"/>
+      <property id="module.driver.i3c.stdbr.opendrain.frequency" value="400000"/>
+      <property id="module.driver.i3c.stdbr.pushpull.logic_high" value="167"/>
+      <property id="module.driver.i3c.stdbr.pushpull.frequency" value="3400000"/>
+      <property id="module.driver.i3c.extbr.opendrain.logic_high" value="167"/>
+      <property id="module.driver.i3c.extbr.opendrain.frequency" value="1000000"/>
+      <property id="module.driver.i3c.extbr.pushpull.logic_high" value="167"/>
+      <property id="module.driver.i3c.extbr.pushpull.frequency" value="3400000"/>
+      <property id="module.driver.i3c.bitrate_settings.bus_timing.open_drain_rising" value="0"/>
+      <property id="module.driver.i3c.bitrate_settings.bus_timing.open_drain_falling" value="0"/>
+      <property id="module.driver.i3c.bitrate_settings.bus_timing.push_pull_rising" value="0"/>
+      <property id="module.driver.i3c.bitrate_settings.bus_timing.push_pull_falling" value="0"/>
+      <property id="module.driver.i3c.clock_stalling_address_assignment_phase" value="module.driver.i3c.clock_stalling_address_assignment_phase.disabled"/>
+      <property id="module.driver.i3c.clock_stalling_transition_phase" value="module.driver.i3c.clock_stalling_transition_phase.disabled"/>
+      <property id="module.driver.i3c.clock_stalling_parity_phase" value="module.driver.i3c.clock_stalling_parity_phase.disabled"/>
+      <property id="module.driver.i3c.clock_stalling_ack_phase" value="module.driver.i3c.clock_stalling_ack_phase.disabled"/>
+      <property id="module.driver.i3c.clock_stalling_time" value="0"/>
+      <property id="module.driver.i3c.bus_free_condition" value="38.4"/>
+      <property id="module.driver.i3c.bus_available_condition" value="1"/>
+      <property id="module.driver.i3c.bus_idle_condition" value="1000"/>
+      <property id="module.driver.i3c.ack_hot_join" value="module.driver.i3c.ack_hot_join.disabled"/>
+      <property id="module.driver.i3c.notify_rejected_hot_join_request" value="module.driver.i3c.notify_rejected_hot_join_request.disabled"/>
+      <property id="module.driver.i3c.notify_rejected_mastership_request" value="module.driver.i3c.notify_rejected_mastership_request.disabled"/>
+      <property id="module.driver.i3c.notify_rejected_interrupt_request" value="module.driver.i3c.notify_rejected_interrupt_request.disabled"/>
+      <property id="module.driver.i3c.inband_interrupts" value="module.driver.i3c.inband_interrupts.disabled"/>
+      <property id="module.driver.i3c.timeout_detection" value="module.driver.i3c.timeout_detection.disabled"/>
+      <property id="module.driver.i3c.hotjoin_requests" value="module.driver.i3c.hotjoin_requests.disabled"/>
+      <property id="module.driver.i3c.activity_state" value="module.driver.i3c.activity_state.0"/>
+      <property id="module.driver.i3c.write_length" value="65535"/>
+      <property id="module.driver.i3c.read_length" value="65535"/>
+      <property id="module.driver.i3c.ibi_payload_length" value="0"/>
+      <property id="module.driver.i3c.write_data_rate" value="module.driver.i3c.write_data_rate.2mhz"/>
+      <property id="module.driver.i3c.read_data_rate" value="module.driver.i3c.read_data_rate.2mhz"/>
+      <property id="module.driver.i3c.clock_to_data_time" value="module.driver.i3c.clock_to_data_time.8ns"/>
+      <property id="module.driver.i3c.include_max_read_turnaround_time" value="module.driver.i3c.include_max_read_turnaround_time.disabled"/>
+      <property id="module.driver.i3c.max_read_turnaround_time" value="0"/>
+      <property id="module.driver.i3c.frequency_byte" value="0"/>
+      <property id="module.driver.i3c.inaccuracy_byte" value="0"/>
+      <property id="module.driver.i3c.hdr_ddr" value="enum.driver.i3c.hdr_ddr.disabled"/>
+      <property id="module.driver.i3c.hdr_tsp" value="enum.driver.i3c.hdr_tsp.disabled"/>
+      <property id="module.driver.i3c.hdr_tsl" value="enum.driver.i3c.hdr_tsl.disabled"/>
+      <property id="module.driver.i3c.ipl" value="board.icu.common.irq.priority5"/>
+      <property id="module.driver.i3c.eei_ipl" value="board.icu.common.irq.priority5"/>
+    </module>
     <context id="_hal.0">
       <stack module="module.driver.ioport_on_ioport.0"/>
       <stack module="module.driver.timer_on_gpt.292547005"/>
+      <stack module="module.driver.i3c_on_i3c.591461561"/>
     </context>
     <config id="config.driver.gpt">
       <property id="config.driver.gpt.param_checking_enable" value="config.driver.gpt.param_checking_enable.bsp"/>
@@ -289,6 +342,13 @@
     <config id="config.driver.ioport">
       <property id="config.driver.ioport.checking" value="config.driver.ioport.checking.system"/>
       <property id="config.driver.ioport.ccd_support_enable" value="config.driver.ioport.ccd_support_enable.disabled"/>
+    </config>
+    <config id="config.driver.i3c">
+      <property id="config.driver.i3c.param_checking_enable" value="config.driver.i3c.param_checking_enable.bsp"/>
+      <property id="config.driver.i3c.unaligned_buffer_support" value="config.driver.i3c.unaligned_buffer_support.enabled"/>
+      <property id="config.driver.i3c.master_support" value="config.driver.i3c.master_support.enabled"/>
+      <property id="config.driver.i3c.slave_support" value="config.driver.i3c.slave_support.enabled"/>
+      <property id="config.driver.i3c.error_recovery" value="config.driver.i3c.error_recovery.2"/>
     </config>
   </raModuleConfiguration>
   <raPinConfiguration>
