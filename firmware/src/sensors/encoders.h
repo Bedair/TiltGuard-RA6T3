@@ -2,9 +2,19 @@
  * encoders.h
  *
  * Single-channel wheel encoders (M2A = left on IRQ7/P408, M1A = right on
- * IRQ1/P205), both edges counted, exactly like the stock firmware's CHANGE
+ * IRQ4/P411), both edges counted, exactly like the stock firmware's CHANGE
  * interrupts. No direction yet - that comes from the motor command in
  * Phase 2, so counts only ever increase.
+ *
+ * The right encoder's pin has moved twice: originally P205 (Pmod2-7,
+ * IRQ1, 5 V-tolerant direct), then P105 (Arduino D2, IRQ0) through a
+ * BSS138 shifter once the terminal-block boards replaced Pmod2 access,
+ * and now **P411 (Arduino D1, IRQ4)**, direct - P411 is natively
+ * 5 V-tolerant, so the terminal-block wiring needs no shifter channel for
+ * this signal. IRQ4 is shared by three candidate pins on this MCU (P111,
+ * P402, P411); P402 had a stray IRQ-enable left over from the board
+ * template (unused, but would have silently double-driven IRQ4) and was
+ * disabled when this moved. See docs/wiring.md.
  *
  * COUNTS_PER_WHEEL_REV = 660: 22 edges per motor revolution (11 pulses,
  * both edges counted) x 30:1 gearing. Hardware confirmed working 2026-11

@@ -21,6 +21,29 @@ void R_BSP_WarmStart (bsp_warm_start_event_t event)
 {
     if (BSP_WARM_START_RESET == event)
     {
+        /*
+         * TiltGuard: drive every motor-control line low as early as possible
+         * after reset. Out of reset these pins are Hi-Z inputs, and the BSS138
+         * shifter's LV-side 10 k pull-ups would otherwise pull them high, which
+         * the TB6612FNG sees as STBY/PWM/IN high and spins the motors (see
+         * docs/hardware-findings.md, "Motor lines float high during reset").
+         *
+         * This runs before clock init and before the C runtime, so it touches
+         * the port registers directly (PCNTR1 is not write-protected, unlike
+         * PmnPFS). Out of reset PODR = 0, so setting PDR makes each pin a
+         * low-driven output. R_IOPORT_Open() at BSP_WARM_START_POST_C then
+         * applies the configured pin setup (STBY/AIN1/BIN1 output-low, PWMA/PWMB
+         * to GPT with duty 0). It cannot cover the time while RES# is held low;
+         * the external pull-down on the LV side handles that.
+         */
+        uint32_t const port0_mask = (1UL << 6U) | (1UL << 8U);   /* P006 STBY, P008 AIN1. */
+        uint32_t const port1_mask = (1UL << 10U) | (1UL << 13U); /* P110 BIN1, P113 PWMB. */
+        uint32_t const port4_mask = (1UL << 9U);                 /* P409 PWMA. */
+
+        R_PORT0->PCNTR1 = (R_PORT0->PCNTR1 & ~(port0_mask << 16U)) | port0_mask;
+        R_PORT1->PCNTR1 = (R_PORT1->PCNTR1 & ~(port1_mask << 16U)) | port1_mask;
+        R_PORT4->PCNTR1 = (R_PORT4->PCNTR1 & ~(port4_mask << 16U)) | port4_mask;
+
 #if BSP_FEATURE_FLASH_LP_VERSION != 0
 
         /* Enable reading from data flash. */

@@ -77,10 +77,126 @@ static volatile uint32_t s_failed_read_count;
 static volatile uint32_t s_sequence;
 static mpu6050_raw_sample_t s_latest_raw;
 
-/* Filter state, touched only from mpu6050_update() (main loop) and read via snapshot. */
-static float                  s_gyro_x_bias_raw;
-static uint32_t               s_last_processed_sequence;
+/* Filter state. Written from the I3C read-complete callback (ISR, priority
+ * 5), read via mpu6050_get_angle()'s snapshot from the main loop. */
+static float                    s_gyro_x_bias_raw;
 static volatile mpu6050_angle_t s_angle;
+static volatile uint32_t        s_last_control_step_cycles;
+
+/*
+ * I2C bus recovery (UM10204 section 3.1.16). The MPU-6050 runs from the robot's
+ * battery-fed 5 V rail, so it stays powered through an FPB reset. A reset in
+ * the middle of a read can leave it holding SDA low, waiting for clocks that
+ * never come. The I3C master then cannot issue a START, and every transfer
+ * times out. Fix: with the pins temporarily as open-drain GPIO, clock SCL
+ * until the slave releases SDA (at most 9 clocks), then send a STOP.
+ */
+#define MPU6050_SCL_PIN                (BSP_IO_PORT_01_PIN_00) /* P100. */
+#define MPU6050_SDA_PIN                (BSP_IO_PORT_01_PIN_01) /* P101. */
+#define MPU6050_BUS_RECOVERY_MAX_CLOCKS (9U)
+#define MPU6050_BUS_HALF_PERIOD_US     (5U)                    /* ~100 kHz. */
+
+/* Same value as ra_gen/pin_data.c, used to hand the pins back to the peripheral. */
+#define MPU6050_PIN_CFG_PERIPHERAL     ((uint32_t) IOPORT_CFG_DRIVE_HIGH | (uint32_t) IOPORT_CFG_PERIPHERAL_PIN | \
+                                        (uint32_t) IOPORT_PERIPHERAL_IIC)
+#define MPU6050_PIN_CFG_OD_HIGH        ((uint32_t) IOPORT_CFG_PORT_DIRECTION_OUTPUT | \
+                                        (uint32_t) IOPORT_CFG_NMOS_ENABLE |           \
+                                        (uint32_t) IOPORT_CFG_PORT_OUTPUT_HIGH)
+
+static uint32_t s_bus_recovery_result = MPU6050_BUS_RECOVERY_NOT_RUN;
+
+static void mpu6050_bus_delay (void)
+{
+    R_BSP_SoftwareDelay(MPU6050_BUS_HALF_PERIOD_US, BSP_DELAY_UNITS_MICROSECONDS);
+}
+
+static fsp_err_t mpu6050_bus_recover (void)
+{
+    /* Release both lines (open-drain high), SCL first. */
+    fsp_err_t err = R_IOPORT_PinCfg(&g_ioport_ctrl, MPU6050_SCL_PIN, MPU6050_PIN_CFG_OD_HIGH);
+
+    if (FSP_SUCCESS != err)
+    {
+        return err;
+    }
+
+    err = R_IOPORT_PinCfg(&g_ioport_ctrl, MPU6050_SDA_PIN, MPU6050_PIN_CFG_OD_HIGH);
+
+    if (FSP_SUCCESS != err)
+    {
+        return err;
+    }
+
+    mpu6050_bus_delay();
+
+    uint32_t clocks = 0U;
+
+    R_BSP_PinAccessEnable();
+
+    while ((BSP_IO_LEVEL_LOW == R_BSP_PinRead(MPU6050_SDA_PIN)) && (clocks < MPU6050_BUS_RECOVERY_MAX_CLOCKS))
+    {
+        R_BSP_PinWrite(MPU6050_SCL_PIN, BSP_IO_LEVEL_LOW);
+        mpu6050_bus_delay();
+        R_BSP_PinWrite(MPU6050_SCL_PIN, BSP_IO_LEVEL_HIGH);
+        mpu6050_bus_delay();
+        clocks++;
+    }
+
+    bool const sda_released = (BSP_IO_LEVEL_HIGH == R_BSP_PinRead(MPU6050_SDA_PIN));
+
+    if (sda_released && (clocks > 0U))
+    {
+        /* STOP: SDA low -> high while SCL is high, so the slave sees a clean bus. */
+        R_BSP_PinWrite(MPU6050_SCL_PIN, BSP_IO_LEVEL_LOW);
+        mpu6050_bus_delay();
+        R_BSP_PinWrite(MPU6050_SDA_PIN, BSP_IO_LEVEL_LOW);
+        mpu6050_bus_delay();
+        R_BSP_PinWrite(MPU6050_SCL_PIN, BSP_IO_LEVEL_HIGH);
+        mpu6050_bus_delay();
+        R_BSP_PinWrite(MPU6050_SDA_PIN, BSP_IO_LEVEL_HIGH);
+        mpu6050_bus_delay();
+    }
+
+    bool const scl_high = (BSP_IO_LEVEL_HIGH == R_BSP_PinRead(MPU6050_SCL_PIN));
+
+    R_BSP_PinAccessDisable();
+
+    if (!sda_released)
+    {
+        s_bus_recovery_result = MPU6050_BUS_RECOVERY_SDA_STUCK;
+    }
+    else if (!scl_high)
+    {
+        s_bus_recovery_result = MPU6050_BUS_RECOVERY_SCL_STUCK;
+    }
+    else
+    {
+        s_bus_recovery_result = clocks; /* 0 = bus was already idle. */
+    }
+
+    /* Hand the pins back to the I3C peripheral. */
+    err = R_IOPORT_PinCfg(&g_ioport_ctrl, MPU6050_SCL_PIN, MPU6050_PIN_CFG_PERIPHERAL);
+
+    if (FSP_SUCCESS != err)
+    {
+        return err;
+    }
+
+    err = R_IOPORT_PinCfg(&g_ioport_ctrl, MPU6050_SDA_PIN, MPU6050_PIN_CFG_PERIPHERAL);
+
+    if (FSP_SUCCESS != err)
+    {
+        return err;
+    }
+
+    return ((MPU6050_BUS_RECOVERY_SDA_STUCK == s_bus_recovery_result) ||
+            (MPU6050_BUS_RECOVERY_SCL_STUCK == s_bus_recovery_result)) ? FSP_ERR_INVALID_HW_CONDITION : FSP_SUCCESS;
+}
+
+uint32_t mpu6050_get_bus_recovery_result (void)
+{
+    return s_bus_recovery_result;
+}
 
 static void mpu6050_enable_dwt (void)
 {
@@ -191,12 +307,19 @@ fsp_err_t mpu6050_init (void)
     s_missed_read_count  = 0U;
     s_failed_read_count  = 0U;
     s_sequence           = 0U;
-    s_last_processed_sequence = 0U;
+    s_last_control_step_cycles = 0U;
     s_angle.accel_angle_deg    = 0.0f;
     s_angle.filtered_angle_deg = 0.0f;
     s_angle.gyro_rate_dps      = 0.0f;
 
-    fsp_err_t err = R_I3C_Open(&g_i3c_imu_ctrl, &g_i3c_imu_cfg);
+    fsp_err_t err = mpu6050_bus_recover();
+
+    if (FSP_SUCCESS != err)
+    {
+        return err;
+    }
+
+    err = R_I3C_Open(&g_i3c_imu_ctrl, &g_i3c_imu_cfg);
 
     if (FSP_SUCCESS != err)
     {
@@ -369,6 +492,25 @@ static void mpu6050_tick_transfer_succeeded (uint8_t const * p_data, uint32_t le
 
         s_latest_raw = raw;
         s_sequence++;
+
+        /* "Control step": the accel-angle/complementary-filter math, done
+         * here (ISR context) rather than the main loop, so a fresh sample
+         * is usable ~0.4 ms after the transfer completes instead of up to
+         * ~1.4 ms later. Timed so this tradeoff can be checked, not assumed. */
+        uint32_t const control_step_start = DWT->CYCCNT;
+
+        float const accel_angle_deg = atan2f((float) raw.accel_y, (float) raw.accel_z) * MPU6050_RAD_TO_DEG;
+        float const gyro_rate_dps   = ((float) raw.gyro_x - s_gyro_x_bias_raw) / MPU6050_GYRO_SENSITIVITY_LSB_PER_DPS;
+
+        float const filtered_angle_deg =
+            (MPU6050_COMPLEMENTARY_FILTER_ALPHA * (s_angle.filtered_angle_deg + (gyro_rate_dps * MPU6050_FILTER_DT_S)))
+            + ((1.0f - MPU6050_COMPLEMENTARY_FILTER_ALPHA) * accel_angle_deg);
+
+        s_angle.accel_angle_deg    = accel_angle_deg;
+        s_angle.filtered_angle_deg = filtered_angle_deg;
+        s_angle.gyro_rate_dps      = gyro_rate_dps;
+
+        s_last_control_step_cycles = DWT->CYCCNT - control_step_start;
     }
     else
     {
@@ -482,37 +624,6 @@ void mpu6050_i3c_callback (i3c_callback_args_t const * const p_args)
     }
 }
 
-void mpu6050_update (void)
-{
-    uint32_t primask = __get_PRIMASK();
-
-    __disable_irq();
-    uint32_t const sequence = s_sequence;
-    mpu6050_raw_sample_t const raw = s_latest_raw;
-    __set_PRIMASK(primask);
-
-    if (sequence == s_last_processed_sequence)
-    {
-        return;
-    }
-
-    s_last_processed_sequence = sequence;
-
-    float const accel_angle_deg = atan2f((float) raw.accel_y, (float) raw.accel_z) * MPU6050_RAD_TO_DEG;
-    float const gyro_rate_dps   = ((float) raw.gyro_x - s_gyro_x_bias_raw) / MPU6050_GYRO_SENSITIVITY_LSB_PER_DPS;
-
-    float const filtered_angle_deg =
-        (MPU6050_COMPLEMENTARY_FILTER_ALPHA * (s_angle.filtered_angle_deg + (gyro_rate_dps * MPU6050_FILTER_DT_S)))
-        + ((1.0f - MPU6050_COMPLEMENTARY_FILTER_ALPHA) * accel_angle_deg);
-
-    primask = __get_PRIMASK();
-    __disable_irq();
-    s_angle.accel_angle_deg    = accel_angle_deg;
-    s_angle.filtered_angle_deg = filtered_angle_deg;
-    s_angle.gyro_rate_dps      = gyro_rate_dps;
-    __set_PRIMASK(primask);
-}
-
 void mpu6050_get_angle (mpu6050_angle_t * p_angle)
 {
     uint32_t const primask = __get_PRIMASK();
@@ -540,4 +651,9 @@ uint32_t mpu6050_get_failed_read_count (void)
 uint32_t mpu6050_get_last_read_cycles (void)
 {
     return s_last_read_cycles;
+}
+
+uint32_t mpu6050_get_last_control_step_cycles (void)
+{
+    return s_last_control_step_cycles;
 }

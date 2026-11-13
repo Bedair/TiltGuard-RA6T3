@@ -32,6 +32,14 @@ void control_tick_get_interval_stats(uint32_t * p_min_cycles, uint32_t * p_max_c
 /* Resets the min/max interval stats. Call from the main loop between report windows. */
 void control_tick_reset_interval_stats(void);
 
+/*
+ * Count of ticks whose interval exceeded 1.5x nominal (300,000 cycles at
+ * 200 MHz) - i.e. the tick ISR (or something that delayed it) ran long
+ * enough to eat into the next tick's budget. Monotonic; feed straight into
+ * safety_update(), which detects increments itself.
+ */
+uint32_t control_tick_get_overrun_count(void);
+
 #ifndef control_tick_isr
 void control_tick_isr(timer_callback_args_t * p_args);
 #endif

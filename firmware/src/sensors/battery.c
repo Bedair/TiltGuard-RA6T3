@@ -75,7 +75,7 @@ void battery_adc_callback (adc_callback_args_t * p_args)
     }
 
     uint16_t  raw_count = 0U;
-    fsp_err_t err       = R_ADC_Read(&g_adc_battery_ctrl, ADC_CHANNEL_2, &raw_count);
+    fsp_err_t err       = R_ADC_Read(&g_adc_battery_ctrl, ADC_CHANNEL_16, &raw_count);
 
     if (FSP_SUCCESS != err)
     {

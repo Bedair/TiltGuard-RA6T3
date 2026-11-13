@@ -1,0 +1,97 @@
+/*
+ * safety.h
+ *
+ * State machine: INIT -> CALIBRATING -> READY -> ACTIVE -> FAULT.
+ *
+ * READY <-> ACTIVE is driven by S1 (debounced in button.c): short press in
+ * READY arms (safety_request_active()); short press in ACTIVE disarms
+ * (safety_disarm()). Short press in FAULT calls safety_reset(), which goes
+ * to INIT, not directly to READY or ACTIVE - CALIBRATING's settle window
+ * runs again before READY. See hal_entry.c for the button-to-state wiring.
+ *
+ * FAULT is latched: once entered (tilt beyond +/-35 deg, an IMU read
+ * failure or >5 ms without a fresh sample, or a 1 kHz tick overrun),
+ * motors_disable() is called exactly once and the state stays FAULT -
+ * including if the triggering condition clears - until safety_reset() is
+ * called explicitly ("manual reset"). Echo timeout is a warning only: it
+ * never latches FAULT, and clears on its own the next tick it isn't
+ * reported.
+ *
+ * Encoder implausibility is reserved (SAFETY_FAULT_ENCODER) - no encoder
+ * signal is checked yet; Phase 2 doesn't have a direction/plausibility
+ * model to compare against.
+ *
+ * This module only calls motors_disable() in software. It does not touch
+ * any FSP peripheral itself, so safety_update() is safe to call from the
+ * main loop (not an ISR) without needing its own locking - there is no
+ * ISR writer to race against.
+ *
+ * TODO (later phase): this is a software-only cutoff with normal 1 kHz
+ * reaction latency. For a hardware-speed cutoff independent of this state
+ * machine, add a POEG (Port Output Enable Group) stack linked to GPT1/
+ * GPT2's "Output Disable POEG Trigger" extended setting, driven from
+ * whatever fast fault signal is available (e.g. a comparator or GPIO).
+ * That would gate the PWM output in hardware without waiting for this
+ * code to run at all - keep this state machine as the software layer on
+ * top of it, not a replacement for it.
+ */
+
+#ifndef SAFETY_H_
+#define SAFETY_H_
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#define SAFETY_TILT_LIMIT_DEG    (35.0f)
+#define SAFETY_IMU_STALE_TICKS   (5U)   /* >5 ms without a fresh IMU sample. */
+#define SAFETY_CALIBRATION_TICKS (500U) /* 0.5 s settle window after init. */
+
+typedef enum e_safety_state
+{
+    SAFETY_STATE_INIT = 0,
+    SAFETY_STATE_CALIBRATING,
+    SAFETY_STATE_READY,
+    SAFETY_STATE_ACTIVE,
+    SAFETY_STATE_FAULT,
+} safety_state_t;
+
+#define SAFETY_FAULT_TILT         (1UL << 0)
+#define SAFETY_FAULT_IMU_STALE    (1UL << 1)
+#define SAFETY_FAULT_ENCODER      (1UL << 2) /* Reserved - not yet checked. */
+#define SAFETY_FAULT_TICK_OVERRUN (1UL << 3)
+
+#define SAFETY_WARNING_ECHO_TIMEOUT (1UL << 0)
+
+void safety_init(void);
+
+/*
+ * Call once per 1 kHz tick from the main loop. Pass the latest filtered
+ * tilt angle and three monotonically-increasing counters (IMU failed-read
+ * count, ultrasonic echo-timeout count, control-tick overrun count) - this
+ * module detects increments itself, so pass the raw totals, not deltas.
+ */
+void safety_update(float tilt_angle_deg,
+                    uint32_t imu_sequence,
+                    uint32_t imu_failed_read_count,
+                    uint32_t echo_timeout_count,
+                    uint32_t tick_overrun_count);
+
+/* Request moving from READY to ACTIVE. No effect outside READY. Driven by
+ * a short press of S1 in READY (see button.c). */
+void safety_request_active(void);
+
+/* Request moving from ACTIVE back to READY ("disarm"). Calls
+ * motors_disable() unconditionally. No effect outside ACTIVE. Driven by a
+ * short press of S1 in ACTIVE. */
+void safety_disarm(void);
+
+/* Clears a latched FAULT and returns to INIT (forcing recalibration).
+ * Does not check whether the triggering condition has actually cleared -
+ * that judgement call belongs to whoever calls this ("manual reset"). */
+void safety_reset(void);
+
+safety_state_t safety_get_state(void);
+uint32_t safety_get_fault_reasons(void);
+uint32_t safety_get_warnings(void);
+
+#endif /* SAFETY_H_ */

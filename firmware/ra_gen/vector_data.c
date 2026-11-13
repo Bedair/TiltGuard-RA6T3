@@ -12,9 +12,10 @@
             [5] = i3c_ibi_isr, /* I3C0 IBI (IBI status buffer full) */
             [6] = i3c_eei_isr, /* I3C0 EEI (Error) */
             [7] = r_icu_isr, /* ICU IRQ7 (External pin interrupt 7) */
-            [8] = r_icu_isr, /* ICU IRQ1 (External pin interrupt 1) */
+            [8] = r_icu_isr, /* ICU IRQ4 (External pin interrupt 4) */
             [9] = r_icu_isr, /* ICU IRQ5 (External pin interrupt 5) */
             [10] = adc_scan_end_isr, /* ADC0 SCAN END (End of A/D scanning operation) */
+            [11] = r_icu_isr, /* ICU IRQ9 (External pin interrupt 9) */
         };
         #if BSP_FEATURE_ICU_HAS_IELSR
         const bsp_interrupt_event_t g_interrupt_event_link_select[BSP_ICU_VECTOR_NUM_ENTRIES] =
@@ -27,9 +28,10 @@
             [5] = BSP_PRV_VECT_ENUM(EVENT_I3C0_IBI,GROUP5), /* I3C0 IBI (IBI status buffer full) */
             [6] = BSP_PRV_VECT_ENUM(EVENT_I3C0_EEI,GROUP6), /* I3C0 EEI (Error) */
             [7] = BSP_PRV_VECT_ENUM(EVENT_ICU_IRQ7,GROUP7), /* ICU IRQ7 (External pin interrupt 7) */
-            [8] = BSP_PRV_VECT_ENUM(EVENT_ICU_IRQ1,GROUP0), /* ICU IRQ1 (External pin interrupt 1) */
+            [8] = BSP_PRV_VECT_ENUM(EVENT_ICU_IRQ4,GROUP0), /* ICU IRQ4 (External pin interrupt 4) */
             [9] = BSP_PRV_VECT_ENUM(EVENT_ICU_IRQ5,GROUP1), /* ICU IRQ5 (External pin interrupt 5) */
             [10] = BSP_PRV_VECT_ENUM(EVENT_ADC0_SCAN_END,GROUP2), /* ADC0 SCAN END (End of A/D scanning operation) */
+            [11] = BSP_PRV_VECT_ENUM(EVENT_ICU_IRQ9,GROUP3), /* ICU IRQ9 (External pin interrupt 9) */
         };
         #endif
         #endif

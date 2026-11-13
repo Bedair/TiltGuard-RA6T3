@@ -36,29 +36,42 @@ Arduino-style code.
 
 ## Electrical facts (verified from ELEGOO's schematic BalanceCarRobot-SCH-V06 and the stock firmware)
 See `docs/hardware-findings.md` and `docs/wiring.md` for detail.
-- The battery is 2S 18650 (7.0–8.4 V) on net `VM`. **The robot board has no 5 V regulator.** 5 V came
-  from the Nano. It is now supplied by the FPB's 5 V (bench, battery OFF) or a buck converter (later).
-- The TB6612FNG and 74LVC2G14 run at 5 V, so the RA6T3's 3.3 V outputs are below their VIH.
-  **Motor control lines must go through the 3.3 V → 5 V level shifters (Phase 2).**
+- The battery is 2S 18650 (7.0–8.4 V) on net `VM`. **The robot board has no 5 V regulator.** 5 V now comes
+  from a buck converter (set to 5.0 V) fed from `VM`, through terminal-block boards (ElectroCookie on the
+  FPB side, GERUI on the robot side) that replaced the original jumper wires. **The FPB itself is still
+  USB-powered**, separate from the robot's 5 V rail — for untethered running later, the plan is a diode-OR
+  (1N5819) from the buck converter's output into the ElectroCookie 5 V rail.
+- The TB6612FNG and 74LVC2G14 run at 5 V, so the RA6T3's 3.3 V outputs are below their VIH. Motor control
+  lines (PWMA, PWMB, AIN1, BIN1, STBY) go through BSS138 level-shifter modules — LV side on FPB 3.3 V, HV
+  side on the buck converter's output, GND shared with the FPB.
 - RA6T3 5 V-tolerant pins: P100, P101, P205, P206, P400, P401, P407–P411. All other pins are 3.3 V max.
+  (Encoders, Echo, and SDA/SCL are wired direct, no shifter, because their pins are on this list.)
+- **Never connect `VM` (the battery net) to any FPB pin.** Never connect the FPB's A4/A5 to SDA/SCL — on
+  this board A4/A5 are plain analog pins, not the I2C bus (the ElectroCookie shield has separate dedicated
+  SDA/SCL terminals) — connecting them together would short two unrelated signals.
 - The encoders are single-channel: A only. M2A = left, M1A = right. Direction comes from the motor command.
-  30:1 gearing, about 660 pulses per wheel revolution counted on both edges, as the stock firmware does.
+  30:1 gearing, 660 pulses per wheel revolution counted on both edges (ELEGOO's figure; matches hardware
+  bring-up, pending a proper driven-distance measurement in Phase 2 — see `docs/hardware-findings.md`).
 - Battery sense: 10 k / 1.5 k divider, so V_bat = V_adc × 11.5 / 1.5. Full ≈ 1.10 V at the pin.
 - The MPU-6050 sits at I2C address 0x68 (WHO_AM_I register 0x75 should return 0x68).
 
 ## Pin map
-| Function | FPB pin | MCU pin | Peripheral |
+| Function | FPB terminal | MCU pin | Peripheral / path |
 |---|---|---|---|
-| IMU SDA / SCL | J1-9 / J1-10 | P101 / P100 | I3C0 in legacy I2C mode |
-| Left encoder (M2A) | D3 | P408 | IRQ7 |
-| Right encoder (M1A) | Pmod2-7 | P205 | IRQ1 |
-| Ultrasonic Echo | Pmod2-8 → later D9 | P407 → later P403 | GPIO, later GPT3 input capture |
-| Ultrasonic Trig | D11 | P109 | GPIO out |
-| Battery sense | A2 | P002 | ADC AN002 |
-| PWMA / PWMB (Phase 2) | D5 / D6 | P409 / P113 | GPT1 A / GPT2 A, 20 kHz |
-| AIN1 / BIN1 / STBY (Phase 2) | D7 / D12 / D8 | P008 / P110 / P006 | GPIO out via level shifter |
+| IMU SDA / SCL | SDA / SCL (dedicated terminals) | P101 / P100 | I3C0 legacy I2C, direct (5 V-tolerant) |
+| Left encoder (M2A) | D3 | P408 | IRQ7, direct (5 V-tolerant) |
+| Right encoder (M1A) | D1 | P411 | IRQ4, direct (5 V-tolerant) |
+| Ultrasonic Echo | D0 | P410 | IRQ5, direct (5 V-tolerant) |
+| Ultrasonic Trig | D11 | P109 | GPIO out, 3.3 V |
+| Battery sense (VOL) | D4 | P500 | ADC AN016, max 1.1 V |
+| PWMA / PWMB | D5 / D6 | P409 / P113 | GPT1 A / GPT2 A, 20 kHz, via Shifter 1 ch1/ch2 |
+| AIN1 / BIN1 | D7 / D12 | P008 / P110 | GPIO out, via Shifter 1 ch3/ch4 |
+| STBY | D8 | P006 | GPIO out, via Shifter 2 ch1, low = motors off |
 | Control loop tick | — | — | GPT0, 1 kHz periodic interrupt |
 | LED1 / LED2 | — | P207 / P206 | GPIO |
+
+Not used: Pmod 2, J6 (A0–A5), FPB A4/A5. Full detail (shifter channel assignments, buck converter wiring,
+grounding) in `docs/wiring.md`.
 
 ## Stock firmware baseline (ELEGOO Tumbller, to port first and then beat)
 - 200 Hz loop, Kalman angle filter, balance PD kp = 55 / kd = 0.75.
@@ -72,12 +85,16 @@ See `docs/hardware-findings.md` and `docs/wiring.md` for detail.
 | Phase | Content | Gate |
 |---|---|---|
 | 1 | Sensors: RTT, 1 kHz tick, IMU angle, encoders, ultrasonic, battery | Thu Nov 12 |
-| 2 | Motors through level shifters, buck-converter power | Mon Nov 16 |
+| 2 | Motors via the terminal-block boards and BSS138 shifters, buck-converter power | Mon Nov 16 |
 | 3 | Balancing: port the stock law, then cascaded 1 kHz control | Fri Nov 20 |
 | 4 | Speed/turn control, AEB lean-back braking, safety monitor, telemetry dashboard | Wed Nov 25 |
 | 5 | Demo video (stock firmware vs RA6T3, wall test), write-up | Sun Nov 29 |
 
 ## Safety while developing
-- Phase 1 runs with the battery switch OFF; the FPB's USB powers the robot's 5 V rail.
-- Never connect `VM`, or the empty Nano socket's `VIN`, to any FPB pin.
+- Phase 1 ran with the battery switch OFF; the FPB's USB powered the robot's 5 V rail directly.
+- Phase 2 (terminal-block boards) needs the battery ON to feed the buck converter — `VM` only ever goes
+  into the buck converter's IN+, never into any FPB pin, and the FPB's own logic stays on USB power
+  throughout, electrically separate from the robot's 5 V rail.
+- Never connect `VM`, or the empty Nano socket's `VIN`, to any FPB pin. Never connect the FPB's A4/A5 to
+  SDA/SCL (see Electrical facts above).
 - When the motors are first enabled, keep the robot lifted (wheels free) and add a firmware tilt cut-off.

@@ -1,18 +1,20 @@
 /*
  * battery.h
  *
- * Battery sense on AN002 (P002), 10 k / 1.5 k divider: V_bat = V_pin * 11.5/1.5.
+ * Battery sense on AN016 (P500, Arduino D4) - moved here from AN002/P002
+ * (A2/J6) to free up J6. 10 k / 1.5 k divider: V_bat = V_pin * 11.5/1.5.
  * Scanned every 100 ms via a software-triggered single ADC scan; the result
  * is exponentially low-pass filtered (alpha = 0.1, ~1 s settling at the
  * 100 ms sample rate) before the full/low thresholds are applied, so a
  * single noisy sample can't flip the flag.
  *
- * Hardware confirmed working 2026-11: the 12-bit/3.3 V/divider conversion
- * itself was correct (no calibration gain needed). A ~10% high reading
- * turned out to be a ~0.13 V ground offset between the robot and FPB
- * grounds (see docs/hardware-findings.md) - fixed with extra GND wires,
- * not in software. The first ADC conversion after boot is unsettled
- * (~1.72 V observed); BATTERY_WARMUP_SCANS_TO_DISCARD below drops the first
+ * Hardware confirmed 2026-11 on AN002/P002: the 12-bit/3.3 V/divider
+ * conversion itself was correct (no calibration gain needed). A ~9-10%
+ * high reading is an OPEN ISSUE, deferred to Phase 4 - a ground offset
+ * between the robot and FPB is a candidate explanation but NOT confirmed
+ * (see docs/hardware-findings.md). Not yet re-tested on AN016/P500. The
+ * first ADC conversion after boot is unsettled (~1.72 V observed, separate
+ * from the open issue above); BATTERY_WARMUP_SCANS_TO_DISCARD below drops the first
  * few scans so the filter is seeded from a real reading.
  */
 
