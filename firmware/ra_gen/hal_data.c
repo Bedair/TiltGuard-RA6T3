@@ -291,7 +291,7 @@ const adc_cfg_t g_adc_battery_cfg =
 #else
   .scan_end_irq = FSP_INVALID_VECTOR,
 #endif
-  .scan_end_ipl = (6),
+  .scan_end_ipl = (2),
 #if defined(VECTOR_NUMBER_ADC0_SCAN_END_B)
     .scan_end_b_irq      = VECTOR_NUMBER_ADC0_SCAN_END_B,
 #else
@@ -377,8 +377,8 @@ const i3c_extended_cfg_t g_i3c_imu_cfg_extend =
                   VECTOR_NUMBER_I3C0_RX,
           .tx_irq = VECTOR_NUMBER_I3C0_TX, .ibi_irq = VECTOR_NUMBER_I3C0_IBI, .eei_irq = VECTOR_NUMBER_I3C0_EEI,
 
-          .ipl = (5),
-          .eei_ipl = (5), };
+          .ipl = (2),
+          .eei_ipl = (2), };
 
 /* Configuration for this instance. */
 const i3c_cfg_t g_i3c_imu_cfg =

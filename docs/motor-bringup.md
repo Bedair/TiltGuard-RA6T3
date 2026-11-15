@@ -63,7 +63,7 @@ touching anything.
 - **Press S1 again at any point** while `ACTIVE` (including mid-bench-test)
   → immediate disarm: `motors_disable()` runs (STBY low, both duties 0),
   regardless of which phase is running.
-- **Tilt the robot past ±35° at any point**, including during the bench
+- **Tilt the robot past ±25° at any point** (±35° before Phase 3), including during the bench
   test → immediate latched `FAULT`: `motors_disable()` runs, LED2 goes
   solid on. This is checked every tick throughout the bench test, not
   skipped — confirmed by `safety_update()` running unconditionally before

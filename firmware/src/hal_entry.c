@@ -15,24 +15,29 @@
 #include "safety/safety.h"
 #include "safety/button.h"
 #include "actuators/motors.h"
+#include "control/balance.h"
+#include "control/jog.h"
+#include "telemetry/console.h"
+#include "safety/fault.h"
 
 extern bsp_leds_t g_bsp_leds;
 
 /* 1 kHz tick thresholds. */
 #define LED_BLINK_TICKS     (500U)  /* 1 Hz LED1 heartbeat, and LED2's ACTIVE blink rate. */
-#define CSV_REPORT_TICKS    (5U)    /* 200 Hz compact CSV on RTT channel 1. */
-#define SENSOR_REPORT_TICKS (100U)  /* 10 Hz encoder/ultrasonic/battery/safety telemetry. */
+#define CSV_REPORT_TICKS    (10U)   /* 100 Hz CSV on RTT channel 1, while armed. */
+#define SENSOR_REPORT_TICKS (100U)  /* 10 Hz: the armed line, or encoder/ultrasonic/battery/safety when not armed. */
 #define IMU_REPORT_TICKS    (500U)  /* 2 Hz IMU telemetry - kept slower so the output stays readable. */
 #define TICK_REPORT_TICKS   (1000U) /* 1 Hz tick-timing telemetry. */
 #define CYCLES_PER_US       (200U)  /* Core clock is 200 MHz; see CLAUDE.md. */
 
 /*
- * Bench-test mode: uncomment to enable. Only runs after arming (S1 in
- * READY); one motor at a time, max 15% duty, then auto-disarms. Without
- * this defined, ACTIVE does nothing to the motors at all - arming just
- * means "ready for a control law that doesn't exist yet" (Phase 3).
+ * Bench-test mode (Phase 2 bring-up): uncomment, or add MOTOR_BENCH_TEST to
+ * the compiler's defined symbols, to build it in. Then arming (S1 in READY)
+ * runs the bench sequence instead of balancing: one motor at a time, max
+ * 15% duty, then auto-disarms. The default build balances
+ * (control/balance.c) and never runs the bench sequence.
  */
-#define MOTOR_BENCH_TEST /* Phase 2 bring-up. Comment out again before the Phase 3 control law. */
+/* #define MOTOR_BENCH_TEST */
 
 #ifdef MOTOR_BENCH_TEST
 #define BENCH_PHASE_TICKS    (2000U) /* 2 s per phase. */
@@ -154,6 +159,522 @@ static void fault_halt (bsp_leds_t const * p_leds, const char * p_module, fsp_er
     }
 }
 
+/*
+ * Main-loop helpers. Each report lives in its own non-inlined function, so
+ * their locals (snapshots, decimal splits, printf argument blocks) reuse one
+ * stack region one at a time instead of all being live in hal_entry()'s frame
+ * together. The main stack is 1 KB and must hold the deepest of these plus
+ * nested interrupts on top; see docs/hardware-findings.md (stack budget).
+ */
+#define HAL_NOINLINE __attribute__((noinline))
+
+static HAL_NOINLINE uint32_t echo_timeout_count (void)
+{
+    ultrasonic_snapshot_t ultrasonic;
+    ultrasonic_get_snapshot(&ultrasonic);
+
+    return ultrasonic.timeout_count;
+}
+
+#ifndef MOTOR_BENCH_TEST
+static HAL_NOINLINE void print_armed_legend (void)
+{
+    telemetry_printf("line: ang/sp deg, gyro dps | bal spd turn = stock 8-bit terms before clamping, "
+                     "pwm_L = bal-spd-turn, pwm_R = bal-spd+turn | ");
+    telemetry_printf("L/R = driver command dir + duty permille | encL/encR = edges per 40 ms (no sign) | ");
+    telemetry_printf("mot = did the wheel turn: ok, NONE (driven >= %u permille, no edges), low, idle (not driven), "
+                     "UNEXP (turned while not driven)\r\n", (unsigned) BALANCE_MOTION_MIN_DUTY_PERMILLE);
+    telemetry_printf("expect: ang-sp > +%d deg -> L=FWD R=FWD, ang-sp < -%d deg -> L=REV R=REV\r\n",
+                     (int) BALANCE_CHECK_MIN_ERROR_DEG, (int) BALANCE_CHECK_MIN_ERROR_DEG);
+}
+
+/* Records this run's parameters and mode. Called after try_arm() has
+ * returned, so its frame isn't under the printf chain. */
+static HAL_NOINLINE void report_arm (float angle_deg)
+{
+    balance_params_t params;
+    balance_get_params(&params);
+
+    console_print_armed(angle_deg, &params);
+    console_print_mode();
+    console_print_speed_loop();
+    print_armed_legend();
+}
+
+/* Returns true if it requested ACTIVE; prints the refusal otherwise. */
+static HAL_NOINLINE bool try_arm (float angle_deg)
+{
+    balance_params_t params;
+    balance_get_params(&params);
+
+    float const arm_error_deg = angle_deg - params.setpoint_deg;
+
+    if (fabsf(arm_error_deg) < BALANCE_ARM_WINDOW_DEG)
+    {
+        safety_request_active();
+
+        return true;
+    }
+
+    decimal2_t angle_dec;
+    decimal2_t setpoint_dec;
+    decimal2_t error_dec;
+    split_decimal2(angle_deg, &angle_dec);
+    split_decimal2(params.setpoint_deg, &setpoint_dec);
+    split_decimal2(arm_error_deg, &error_dec);
+
+    telemetry_printf("arm refused: angle=%s%d.%02u setpoint=%s%d.%02u error=%s%d.%02u deg, "
+                     "must be within +/-%d deg - hold it upright and press S1 again\r\n",
+                     angle_dec.p_sign, angle_dec.int_part, angle_dec.frac_part,
+                     setpoint_dec.p_sign, setpoint_dec.int_part, setpoint_dec.frac_part,
+                     error_dec.p_sign, error_dec.int_part, error_dec.frac_part,
+                     (int) BALANCE_ARM_WINDOW_DEG);
+
+    return false;
+}
+#endif
+
+/* S1: short press in READY arms, in ACTIVE disarms, in FAULT resets (back to
+ * INIT - CALIBRATING's settle window runs again before READY). Debounced in
+ * button.c; this just reacts to a new press. */
+#ifndef MOTOR_BENCH_TEST
+/* Set by S1 in FAULT: arm automatically once the reset reaches READY. */
+static bool s_arm_pending;
+
+static HAL_NOINLINE void handle_pending_arm (float angle_deg)
+{
+    if (!s_arm_pending)
+    {
+        return;
+    }
+
+    safety_state_t const state = safety_get_state();
+
+    if (SAFETY_STATE_READY == state)
+    {
+        s_arm_pending = false;
+
+        if (try_arm(angle_deg))
+        {
+            report_arm(angle_deg);
+        }
+    }
+    else if (SAFETY_STATE_FAULT == state)
+    {
+        /* Faulted again during the settle window (e.g. still tilted past
+         * the limit): don't arm later by surprise. */
+        s_arm_pending = false;
+        telemetry_printf("not standing up: fault again (faults=0x%x) - set it on its stand and press S1\r\n",
+                         (unsigned) safety_get_fault_reasons());
+    }
+    else
+    {
+        /* INIT / CALIBRATING: keep waiting. */
+    }
+}
+#endif
+
+static HAL_NOINLINE void handle_button_press (safety_state_t safety_state, float angle_deg)
+{
+    switch (safety_state)
+    {
+        case SAFETY_STATE_READY:
+        {
+            if (jog_is_running())
+            {
+                /* S1 during a jog or the self-test: stop it, don't arm. */
+                jog_abort("aborted by S1");
+                break;
+            }
+
+#ifdef MOTOR_BENCH_TEST
+            (void) angle_deg;
+            safety_request_active();
+#else
+            /* As stock: set it on the floor (resting on its stand is fine) and
+             * press S1 - the law runs from any angle inside the arming window,
+             * so from rest the angle term saturates and kicks it upright. */
+            if (try_arm(angle_deg))
+            {
+                report_arm(angle_deg);
+            }
+#endif
+            break;
+        }
+
+        case SAFETY_STATE_ACTIVE:
+        {
+            safety_disarm();
+            telemetry_printf("disarmed (S1)\r\n");
+            break;
+        }
+
+        case SAFETY_STATE_FAULT:
+        {
+            /* One press after a fall: reset, and stand up as soon as the
+             * 0.5 s settle window ends (handle_pending_arm()). */
+            safety_reset();
+#ifndef MOTOR_BENCH_TEST
+            s_arm_pending = true;
+            telemetry_printf("S1: fault reset - it stands up in ~0.5 s\r\n");
+#endif
+            break;
+        }
+
+        case SAFETY_STATE_INIT:
+        case SAFETY_STATE_CALIBRATING:
+        default:
+        {
+            break; /* No action yet while still settling. */
+        }
+    }
+}
+
+#ifdef MOTOR_BENCH_TEST
+static HAL_NOINLINE void bench_step (uint32_t tick, safety_state_t safety_state)
+{
+    static bench_phase_t  s_bench_phase            = BENCH_PHASE_LEFT_FWD;
+    static uint32_t       s_bench_phase_start_tick = 0U;
+    static safety_state_t s_prev_safety_state      = SAFETY_STATE_INIT;
+
+    if ((SAFETY_STATE_ACTIVE == safety_state) && (SAFETY_STATE_ACTIVE != s_prev_safety_state))
+    {
+        /* Just armed - (re)start the bench sequence from the top. */
+        s_bench_phase            = BENCH_PHASE_LEFT_FWD;
+        s_bench_phase_start_tick = tick;
+        telemetry_printf("bench test: %s\r\n", bench_phase_name(s_bench_phase));
+    }
+
+    if (SAFETY_STATE_ACTIVE == safety_state)
+    {
+        if ((tick - s_bench_phase_start_tick) >= BENCH_PHASE_TICKS)
+        {
+            s_bench_phase            = (bench_phase_t) (s_bench_phase + 1);
+            s_bench_phase_start_tick = tick;
+
+            if (BENCH_PHASE_DONE != s_bench_phase)
+            {
+                telemetry_printf("bench test: %s\r\n", bench_phase_name(s_bench_phase));
+            }
+        }
+
+        switch (s_bench_phase)
+        {
+            case BENCH_PHASE_LEFT_FWD:
+            {
+                motors_set(BENCH_DUTY_PERMILLE, 0);
+                break;
+            }
+
+            case BENCH_PHASE_LEFT_REV:
+            {
+                motors_set((int16_t) -BENCH_DUTY_PERMILLE, 0);
+                break;
+            }
+
+            case BENCH_PHASE_RIGHT_FWD:
+            {
+                motors_set(0, BENCH_DUTY_PERMILLE);
+                break;
+            }
+
+            case BENCH_PHASE_RIGHT_REV:
+            {
+                motors_set(0, (int16_t) -BENCH_DUTY_PERMILLE);
+                break;
+            }
+
+            case BENCH_PHASE_DONE:
+            default:
+            {
+                telemetry_printf("bench test: done, disarming\r\n");
+                safety_disarm();
+                break;
+            }
+        }
+    }
+
+    s_prev_safety_state = safety_state;
+}
+#endif
+
+/*
+ * Armed reporting. All of it comes from one balance_get_status() snapshot
+ * (the most recent control step), so the fields of a line always belong to
+ * the same step. The line buffer and snapshot are static: they'd otherwise
+ * add ~250 B to the main stack (see docs/hardware-findings.md).
+ */
+static telemetry_line_t s_line;
+static balance_status_t s_bal;
+
+#define CSV_HEADER "t_ms,ang,sp,gyro,bal,spd,turn,dirL,dutyL,dirR,dutyR,encL,encR,motL,motR,mode"
+
+static const char * armed_mode_name (balance_status_t const * p_status)
+{
+    return p_status->dry_run ? "DRY-RUN" : "ACTIVE";
+}
+
+static void line_direction_duty (telemetry_line_t * p, bool reverse, uint32_t duty_counts, char separator)
+{
+    telemetry_line_str(p, motors_direction_name(motors_direction(reverse, duty_counts)));
+    telemetry_line_char(p, separator);
+    telemetry_line_u32(p, (uint32_t) motors_duty_permille(duty_counts));
+}
+
+/* 10 Hz on channel 0 while armed:
+ * "ang=+3.2 sp=+0.0 gyro=-12.1 | bal=+176 spd=+0 turn=+0 | L=FWD 690 R=FWD 690 | encL=45 encR=44 | ACTIVE" */
+static HAL_NOINLINE void report_armed_line (void)
+{
+    telemetry_line_t * const p = &s_line;
+
+    telemetry_line_begin(p);
+    telemetry_line_str(p, "ang=");
+    telemetry_line_fixed_signed(p, s_bal.angle_deg, 1U);
+    telemetry_line_str(p, " sp=");
+    telemetry_line_fixed_signed(p, s_bal.setpoint_deg, 1U);
+    telemetry_line_str(p, " gyro=");
+    telemetry_line_fixed_signed(p, s_bal.gyro_dps, 1U);
+    telemetry_line_str(p, " | bal=");
+    telemetry_line_fixed_signed(p, s_bal.bal_8bit, 0U);
+    telemetry_line_str(p, " spd=");
+    telemetry_line_fixed_signed(p, s_bal.spd_8bit, 0U);
+    telemetry_line_str(p, " turn=");
+    telemetry_line_fixed_signed(p, s_bal.turn_8bit, 0U);
+    telemetry_line_str(p, " | L=");
+    line_direction_duty(p, s_bal.command.left_reverse, s_bal.command.left_duty_counts, ' ');
+    telemetry_line_str(p, " R=");
+    line_direction_duty(p, s_bal.command.right_reverse, s_bal.command.right_duty_counts, ' ');
+    telemetry_line_str(p, " | encL=");
+    telemetry_line_u32(p, s_bal.enc_left_window);
+    telemetry_line_str(p, " encR=");
+    telemetry_line_u32(p, s_bal.enc_right_window);
+    telemetry_line_str(p, " | mot L=");
+    telemetry_line_str(p, balance_motion_name(s_bal.motion_left));
+    telemetry_line_str(p, " R=");
+    telemetry_line_str(p, balance_motion_name(s_bal.motion_right));
+    telemetry_line_str(p, " | ");
+    telemetry_line_str(p, armed_mode_name(&s_bal));
+
+    (void) telemetry_line_send(p, 0U);
+}
+
+/* 100 Hz on channel 1 while armed: the same fields as CSV, t_ms first. */
+static HAL_NOINLINE void report_armed_csv (uint32_t tick)
+{
+    telemetry_line_t * const p = &s_line;
+
+    telemetry_line_begin(p);
+    telemetry_line_u32(p, tick);
+    telemetry_line_char(p, ',');
+    telemetry_line_fixed(p, s_bal.angle_deg, 2U);
+    telemetry_line_char(p, ',');
+    telemetry_line_fixed(p, s_bal.setpoint_deg, 2U);
+    telemetry_line_char(p, ',');
+    telemetry_line_fixed(p, s_bal.gyro_dps, 2U);
+    telemetry_line_char(p, ',');
+    telemetry_line_fixed(p, s_bal.bal_8bit, 1U);
+    telemetry_line_char(p, ',');
+    telemetry_line_fixed(p, s_bal.spd_8bit, 1U);
+    telemetry_line_char(p, ',');
+    telemetry_line_fixed(p, s_bal.turn_8bit, 1U);
+    telemetry_line_char(p, ',');
+    line_direction_duty(p, s_bal.command.left_reverse, s_bal.command.left_duty_counts, ',');
+    telemetry_line_char(p, ',');
+    line_direction_duty(p, s_bal.command.right_reverse, s_bal.command.right_duty_counts, ',');
+    telemetry_line_char(p, ',');
+    telemetry_line_u32(p, s_bal.enc_left_window);
+    telemetry_line_char(p, ',');
+    telemetry_line_u32(p, s_bal.enc_right_window);
+    telemetry_line_char(p, ',');
+    telemetry_line_str(p, balance_motion_name(s_bal.motion_left));
+    telemetry_line_char(p, ',');
+    telemetry_line_str(p, balance_motion_name(s_bal.motion_right));
+    telemetry_line_char(p, ',');
+    telemetry_line_str(p, armed_mode_name(&s_bal));
+
+    (void) telemetry_line_send(p, 1U); /* Dropped whole if the host isn't keeping up. */
+}
+
+#ifndef MOTOR_BENCH_TEST
+static HAL_NOINLINE void report_csv_header (void)
+{
+    telemetry_line_t * const p = &s_line;
+
+    telemetry_line_begin(p);
+    telemetry_line_str(p, CSV_HEADER);
+    (void) telemetry_line_send(p, 1U);
+}
+
+#endif
+
+/* 1 Hz while armed ("check: ...") and once when leaving ACTIVE ("logic check: ..."). */
+static HAL_NOINLINE void report_logic_check (const char * p_prefix)
+{
+    balance_check_t const * const p_check = &s_bal.check;
+
+    if (p_check->speed_loop_on)
+    {
+        telemetry_printf("%s skipped (speed loop on)\r\n", p_prefix);
+
+        return;
+    }
+
+    telemetry_printf("%s samples=%u sign_err=%u (not checked: %u with D/turn >= P/2)\r\n",
+                     p_prefix,
+                     (unsigned) p_check->samples,
+                     (unsigned) p_check->sign_err,
+                     (unsigned) p_check->skipped);
+}
+
+/* "motion: L moved=a/b none=c unexp=d | R ...": a/b = windows with edges / windows driven >= 30%. */
+static HAL_NOINLINE void report_motion_wheel (const char * p_prefix, balance_motion_count_t const * p_count)
+{
+    telemetry_printf("%s moved=%u/%u none=%u unexp=%u",
+                     p_prefix,
+                     (unsigned) p_count->moved,
+                     (unsigned) p_count->judged,
+                     (unsigned) p_count->none,
+                     (unsigned) p_count->unexpected);
+}
+
+static HAL_NOINLINE void report_motion (const char * p_prefix)
+{
+    report_motion_wheel(p_prefix, &s_bal.motion_count_left);
+    report_motion_wheel(" | R", &s_bal.motion_count_right);
+    telemetry_printf(" (40 ms windows; judged = driven >= %u permille)\r\n", (unsigned) BALANCE_MOTION_MIN_DUTY_PERMILLE);
+}
+
+#ifndef MOTOR_BENCH_TEST
+static HAL_NOINLINE void report_disarmed (safety_state_t safety_state)
+{
+    balance_get_status(&s_bal); /* Check counters are held after disarm, until the next arm. */
+
+    if (SAFETY_STATE_FAULT == safety_state)
+    {
+        telemetry_printf("disarmed: FAULT faults=0x%x\r\n", (unsigned) safety_get_fault_reasons());
+    }
+
+    report_logic_check("logic check:");
+    report_motion("motion check: L");
+
+    if (s_bal.dry_run)
+    {
+        telemetry_printf("motion check: DRY-RUN, motors were never driven - judged=0 is expected; "
+                         "unexp>0 means a wheel turned with the motors off\r\n");
+    }
+    else if ((0U == s_bal.motion_count_left.judged) && (0U == s_bal.motion_count_right.judged))
+    {
+        telemetry_printf("motion check: never driven >= %u permille for a whole window - no verdict\r\n",
+                         (unsigned) BALANCE_MOTION_MIN_DUTY_PERMILLE);
+    }
+    else
+    {
+        /* Verdicts are in the counts above. */
+    }
+}
+
+static HAL_NOINLINE void print_conventions (void)
+{
+    telemetry_printf("conventions: ang>0 = tilted forward, pwm>0 = wheel driven forward (FWD); "
+                     "forward = the way 'jog' rolls the wheels\r\n");
+    telemetry_printf("correct balance: tilted forward -> L=FWD R=FWD (wheels drive under the falling body)\r\n");
+}
+
+#endif
+
+/* 10 Hz encoder/ultrasonic/battery/safety line on channel 0. Printed in three
+ * parts (same text as one line) to keep each printf's argument block small. */
+static HAL_NOINLINE void report_sensors_encoders (void)
+{
+    encoders_snapshot_t encoders;
+    encoders_get_snapshot(&encoders);
+
+    decimal2_t left_rps;
+    decimal2_t right_rps;
+    split_decimal2(encoders.left_rev_per_s, &left_rps);
+    split_decimal2(encoders.right_rev_per_s, &right_rps);
+
+    telemetry_printf("enc_L=%u enc_R=%u spd_L=%u/5ms(%s%d.%02u rps) spd_R=%u/5ms(%s%d.%02u rps) ",
+                     (unsigned) encoders.left_total, (unsigned) encoders.right_total,
+                     (unsigned) encoders.left_counts_per_5ms, left_rps.p_sign, left_rps.int_part, left_rps.frac_part,
+                     (unsigned) encoders.right_counts_per_5ms, right_rps.p_sign, right_rps.int_part, right_rps.frac_part);
+}
+
+static HAL_NOINLINE void report_sensors_distance (void)
+{
+    ultrasonic_snapshot_t ultrasonic;
+    ultrasonic_get_snapshot(&ultrasonic);
+
+    if (ultrasonic.distance_valid)
+    {
+        decimal2_t distance;
+        split_decimal2(ultrasonic.distance_cm, &distance);
+        telemetry_printf("dist_cm=%s%d.%02u ", distance.p_sign, distance.int_part, distance.frac_part);
+    }
+    else
+    {
+        telemetry_printf("dist_cm=no_echo ");
+    }
+
+    telemetry_printf("echo_timeouts=%u ", (unsigned) ultrasonic.timeout_count);
+}
+
+static HAL_NOINLINE void report_sensors_battery_safety (safety_state_t safety_state)
+{
+    battery_snapshot_t battery;
+    battery_get_snapshot(&battery);
+
+    decimal2_t battery_v;
+    decimal2_t battery_raw_v;
+    split_decimal2(battery.voltage_v, &battery_v);
+    split_decimal2(battery.voltage_raw_v, &battery_raw_v);
+
+    telemetry_printf("v_bat=%s%d.%02u v_bat_raw=%s%d.%02u safety=%s faults=0x%x warn=0x%x\r\n",
+                     battery_v.p_sign, battery_v.int_part, battery_v.frac_part,
+                     battery_raw_v.p_sign, battery_raw_v.int_part, battery_raw_v.frac_part,
+                     safety_state_name(safety_state),
+                     (unsigned) safety_get_fault_reasons(), (unsigned) safety_get_warnings());
+}
+
+static HAL_NOINLINE void report_imu (void)
+{
+    mpu6050_angle_t angle;
+    mpu6050_get_angle(&angle);
+
+    decimal2_t accel_deg;
+    decimal2_t filt_deg;
+    decimal2_t gyro_dps;
+    split_decimal2(angle.accel_angle_deg, &accel_deg);
+    split_decimal2(angle.filtered_angle_deg, &filt_deg);
+    split_decimal2(angle.gyro_rate_dps, &gyro_dps);
+
+    telemetry_printf("accel_deg=%s%d.%02u filt_deg=%s%d.%02u gyro_dps=%s%d.%02u ",
+                     accel_deg.p_sign, accel_deg.int_part, accel_deg.frac_part,
+                     filt_deg.p_sign, filt_deg.int_part, filt_deg.frac_part,
+                     gyro_dps.p_sign, gyro_dps.int_part, gyro_dps.frac_part);
+    telemetry_printf("read_us=%u ctrl_cycles=%u missed=%u failed=%u\r\n",
+                     mpu6050_get_last_read_cycles() / CYCLES_PER_US,
+                     (unsigned) mpu6050_get_last_control_step_cycles(),
+                     (unsigned) mpu6050_get_missed_read_count(),
+                     (unsigned) mpu6050_get_failed_read_count());
+}
+
+static HAL_NOINLINE void report_tick_timing (uint32_t * p_window_start_cyccnt)
+{
+    uint32_t const window_cycles = DWT->CYCCNT - *p_window_start_cyccnt;
+    *p_window_start_cyccnt = DWT->CYCCNT;
+
+    uint32_t min_cycles;
+    uint32_t max_cycles;
+    control_tick_get_interval_stats(&min_cycles, &max_cycles);
+    control_tick_reset_interval_stats();
+
+    telemetry_printf("ticks/s=1000 cycles/1000ticks=%u min_cycles=%u max_cycles=%u overruns=%u ",
+                     window_cycles, min_cycles, max_cycles, (unsigned) control_tick_get_overrun_count());
+    telemetry_printf("stack_free=%u/%u\r\n",
+                     (unsigned) fault_stack_free_bytes(), (unsigned) fault_stack_size_bytes());
+}
+
 /*******************************************************************************************************************//**
  * @brief  TiltGuard entry point.
  *
@@ -163,7 +684,7 @@ static void fault_halt (bsp_leds_t const * p_leds, const char * p_module, fsp_er
  * low, duty 0) from boot regardless of safety state, until S1 arms them
  * from READY. Main loop: LED1 blinks at 1 Hz, LED2 reflects safety state
  * (on=FAULT, blinking=ACTIVE, off otherwise), a compact CSV line goes out
- * on RTT channel 1 at 200 Hz, encoder/ultrasonic/battery/safety telemetry
+ * on RTT channel 1 at 100 Hz while armed, encoder/ultrasonic/battery/safety telemetry
  * reports on channel 0 at 10 Hz, IMU telemetry at 2 Hz, and tick-timing
  * telemetry at 1 Hz. On any init failure, LED2 is held on and the loop
  * halts in a safe state.
@@ -199,7 +720,21 @@ void hal_entry (void)
      * The error is reported after telemetry_init(), so RTT can print it. */
     fsp_err_t const motors_err = motors_init();
 
+    /* Fault handlers with an RTT dump, separate MemManage/Bus/UsageFault, and
+     * the stack high-water paint - before anything else can fault. */
+    fault_init();
+
     telemetry_init();
+
+    {
+        uint32_t const fpccr = fault_get_fpccr();
+
+        telemetry_printf("boot: main stack=%u bytes, FPCCR=0x%08X (ASPEN=%u LSPEN=%u; both 1 = FP context saved in ISRs)\r\n",
+                         (unsigned) fault_stack_size_bytes(),
+                         (unsigned) fpccr,
+                         (unsigned) ((fpccr >> 31U) & 1U),
+                         (unsigned) ((fpccr >> 30U) & 1U));
+    }
 
     if (FSP_SUCCESS != motors_err)
     {
@@ -246,6 +781,13 @@ void hal_entry (void)
         fault_halt(&leds, "button", err);
     }
 
+    /* Before the tick starts: the first IMU sample after control_tick_init()
+     * already calls balance_step(). */
+    balance_init();
+#ifndef MOTOR_BENCH_TEST
+    balance_set_enabled(true);
+#endif
+
     err = control_tick_init();
 
     if (FSP_SUCCESS != err)
@@ -254,6 +796,17 @@ void hal_entry (void)
     }
 
     safety_init();
+
+#ifdef MOTOR_BENCH_TEST
+    telemetry_printf("build: MOTOR_BENCH_TEST - S1 runs the bench sequence, balancing is off\r\n");
+#else
+    telemetry_printf("build: balance (stock ELEGOO law). Set it on the floor (resting is fine), press S1: "
+                     "it stands up and balances. S1 again disarms. After a fall: set it down, press S1 once.\r\n");
+    print_conventions();
+    console_print_mode();
+#endif
+    console_print_params();
+    console_print_speed_loop();
 
     bsp_io_level_t led1_level              = BSP_IO_LEVEL_LOW;
     bsp_io_level_t led2_last_written       = BSP_IO_LEVEL_LOW;
@@ -267,11 +820,8 @@ void hal_entry (void)
     uint32_t       next_imu_report_tick    = IMU_REPORT_TICKS;
     uint32_t       next_tick_report_tick   = TICK_REPORT_TICKS;
     uint32_t       window_start_cyccnt     = DWT->CYCCNT;
-
-#ifdef MOTOR_BENCH_TEST
-    bench_phase_t  bench_phase            = BENCH_PHASE_LEFT_FWD;
-    uint32_t       bench_phase_start_tick = 0U;
-    safety_state_t prev_safety_state      = SAFETY_STATE_INIT;
+#ifndef MOTOR_BENCH_TEST
+    safety_state_t prev_safety_state       = SAFETY_STATE_INIT;
 #endif
 
     while (1)
@@ -288,118 +838,44 @@ void hal_entry (void)
         mpu6050_angle_t angle;
         mpu6050_get_angle(&angle);
 
-        encoders_snapshot_t encoders;
-        encoders_get_snapshot(&encoders);
-
-        ultrasonic_snapshot_t ultrasonic;
-        ultrasonic_get_snapshot(&ultrasonic);
-
-        battery_snapshot_t battery;
-        battery_get_snapshot(&battery);
-
         safety_update(angle.filtered_angle_deg,
                       mpu6050_get_sequence(),
                       mpu6050_get_failed_read_count(),
-                      ultrasonic.timeout_count,
-                      control_tick_get_overrun_count());
+                      echo_timeout_count(),
+                      control_tick_get_overrun_count(),
+                      motors_get_error_count(),
+                      balance_get_stall_fault_count());
 
         safety_state_t const safety_state = safety_get_state();
 
-        /* S1: short press in READY arms, in ACTIVE disarms, in FAULT resets
-         * (back to INIT - CALIBRATING's settle window runs again before
-         * READY). Debounced in button.c; this just reacts to the count. */
         uint32_t const button_press_count = button_get_press_count();
 
         if (button_press_count != last_button_press_count)
         {
             last_button_press_count = button_press_count;
-
-            switch (safety_state)
-            {
-                case SAFETY_STATE_READY:
-                {
-                    safety_request_active();
-                    break;
-                }
-
-                case SAFETY_STATE_ACTIVE:
-                {
-                    safety_disarm();
-                    break;
-                }
-
-                case SAFETY_STATE_FAULT:
-                {
-                    safety_reset();
-                    break;
-                }
-
-                case SAFETY_STATE_INIT:
-                case SAFETY_STATE_CALIBRATING:
-                default:
-                {
-                    break; /* No action yet while still settling. */
-                }
-            }
+            handle_button_press(safety_state, angle.filtered_angle_deg);
         }
+
+        jog_update(tick, safety_state); /* Both builds: a jog must always time out. */
+
+#ifndef MOTOR_BENCH_TEST
+        handle_pending_arm(angle.filtered_angle_deg);
+#endif
 
 #ifdef MOTOR_BENCH_TEST
-
+        bench_step(tick, safety_state);
+#else
         if ((SAFETY_STATE_ACTIVE == safety_state) && (SAFETY_STATE_ACTIVE != prev_safety_state))
         {
-            /* Just armed - (re)start the bench sequence from the top. */
-            bench_phase            = BENCH_PHASE_LEFT_FWD;
-            bench_phase_start_tick = tick;
-            telemetry_printf("bench test: %s\r\n", bench_phase_name(bench_phase));
+            report_csv_header(); /* One header per armed run on channel 1. */
         }
-
-        if (SAFETY_STATE_ACTIVE == safety_state)
+        else if ((SAFETY_STATE_ACTIVE != safety_state) && (SAFETY_STATE_ACTIVE == prev_safety_state))
         {
-            if ((tick - bench_phase_start_tick) >= BENCH_PHASE_TICKS)
-            {
-                bench_phase            = (bench_phase_t) (bench_phase + 1);
-                bench_phase_start_tick = tick;
-
-                if (BENCH_PHASE_DONE != bench_phase)
-                {
-                    telemetry_printf("bench test: %s\r\n", bench_phase_name(bench_phase));
-                }
-            }
-
-            switch (bench_phase)
-            {
-                case BENCH_PHASE_LEFT_FWD:
-                {
-                    motors_set(BENCH_DUTY_PERMILLE, 0);
-                    break;
-                }
-
-                case BENCH_PHASE_LEFT_REV:
-                {
-                    motors_set((int16_t) -BENCH_DUTY_PERMILLE, 0);
-                    break;
-                }
-
-                case BENCH_PHASE_RIGHT_FWD:
-                {
-                    motors_set(0, BENCH_DUTY_PERMILLE);
-                    break;
-                }
-
-                case BENCH_PHASE_RIGHT_REV:
-                {
-                    motors_set(0, (int16_t) -BENCH_DUTY_PERMILLE);
-                    break;
-                }
-
-                case BENCH_PHASE_DONE:
-                default:
-                {
-                    telemetry_printf("bench test: done, disarming\r\n");
-                    safety_disarm();
-                    break;
-                }
-            }
+            report_disarmed(safety_state);
+        }
+        else
+        {
+            /* No transition. */
         }
 
         prev_safety_state = safety_state;
@@ -454,73 +930,43 @@ void hal_entry (void)
             R_BSP_PinAccessDisable();
         }
 
+        console_poll();
+
+        /* Armed (balance law running, live or dry-run): the combined line
+         * and the CSV replace the separate sensor/IMU lines. */
+        bool const report_due = (tick >= next_csv_tick) || (tick >= next_sensor_report_tick) ||
+                                (tick >= next_imu_report_tick) || (tick >= next_tick_report_tick);
+
+        if (report_due)
+        {
+            balance_get_status(&s_bal);
+        }
+
+        bool const armed = s_bal.armed && (SAFETY_STATE_ACTIVE == safety_state);
+
         if (tick >= next_csv_tick)
         {
             next_csv_tick += CSV_REPORT_TICKS;
 
-            int16_t motor_left_permille;
-            int16_t motor_right_permille;
-            motors_get_command(&motor_left_permille, &motor_right_permille);
-
-            telemetry_data_printf(
-                "%u,%u,%d,%d,%d,%d,%u,%u,%u\r\n",
-                tick,
-                (unsigned) mpu6050_get_sequence(),
-                (int) (angle.filtered_angle_deg * 100.0f),
-                (int) (angle.gyro_rate_dps * 100.0f),
-                (int) motor_left_permille,
-                (int) motor_right_permille,
-                (unsigned) encoders.left_counts_per_5ms,
-                (unsigned) encoders.right_counts_per_5ms,
-                (unsigned) safety_state);
+            if (armed)
+            {
+                report_armed_csv(tick);
+            }
         }
 
         if (tick >= next_sensor_report_tick)
         {
             next_sensor_report_tick += SENSOR_REPORT_TICKS;
 
-            decimal2_t left_rps;
-            decimal2_t right_rps;
-            decimal2_t battery_v;
-            decimal2_t battery_raw_v;
-            split_decimal2(encoders.left_rev_per_s, &left_rps);
-            split_decimal2(encoders.right_rev_per_s, &right_rps);
-            split_decimal2(battery.voltage_v, &battery_v);
-            split_decimal2(battery.voltage_raw_v, &battery_raw_v);
-
-            if (ultrasonic.distance_valid)
+            if (armed)
             {
-                decimal2_t distance;
-                split_decimal2(ultrasonic.distance_cm, &distance);
-
-                telemetry_printf(
-                    "enc_L=%u enc_R=%u spd_L=%u/5ms(%s%d.%02u rps) spd_R=%u/5ms(%s%d.%02u rps) "
-                    "dist_cm=%s%d.%02u echo_timeouts=%u v_bat=%s%d.%02u v_bat_raw=%s%d.%02u "
-                    "safety=%s faults=0x%x warn=0x%x\r\n",
-                    (unsigned) encoders.left_total, (unsigned) encoders.right_total,
-                    (unsigned) encoders.left_counts_per_5ms, left_rps.p_sign, left_rps.int_part, left_rps.frac_part,
-                    (unsigned) encoders.right_counts_per_5ms, right_rps.p_sign, right_rps.int_part, right_rps.frac_part,
-                    distance.p_sign, distance.int_part, distance.frac_part,
-                    (unsigned) ultrasonic.timeout_count,
-                    battery_v.p_sign, battery_v.int_part, battery_v.frac_part,
-                    battery_raw_v.p_sign, battery_raw_v.int_part, battery_raw_v.frac_part,
-                    safety_state_name(safety_state),
-                    (unsigned) safety_get_fault_reasons(), (unsigned) safety_get_warnings());
+                report_armed_line();
             }
             else
             {
-                telemetry_printf(
-                    "enc_L=%u enc_R=%u spd_L=%u/5ms(%s%d.%02u rps) spd_R=%u/5ms(%s%d.%02u rps) "
-                    "dist_cm=no_echo echo_timeouts=%u v_bat=%s%d.%02u v_bat_raw=%s%d.%02u "
-                    "safety=%s faults=0x%x warn=0x%x\r\n",
-                    (unsigned) encoders.left_total, (unsigned) encoders.right_total,
-                    (unsigned) encoders.left_counts_per_5ms, left_rps.p_sign, left_rps.int_part, left_rps.frac_part,
-                    (unsigned) encoders.right_counts_per_5ms, right_rps.p_sign, right_rps.int_part, right_rps.frac_part,
-                    (unsigned) ultrasonic.timeout_count,
-                    battery_v.p_sign, battery_v.int_part, battery_v.frac_part,
-                    battery_raw_v.p_sign, battery_raw_v.int_part, battery_raw_v.frac_part,
-                    safety_state_name(safety_state),
-                    (unsigned) safety_get_fault_reasons(), (unsigned) safety_get_warnings());
+                report_sensors_encoders();
+                report_sensors_distance();
+                report_sensors_battery_safety(safety_state);
             }
         }
 
@@ -528,41 +974,22 @@ void hal_entry (void)
         {
             next_imu_report_tick += IMU_REPORT_TICKS;
 
-            decimal2_t accel_deg;
-            decimal2_t filt_deg;
-            decimal2_t gyro_dps;
-            split_decimal2(angle.accel_angle_deg, &accel_deg);
-            split_decimal2(angle.filtered_angle_deg, &filt_deg);
-            split_decimal2(angle.gyro_rate_dps, &gyro_dps);
-
-            telemetry_printf(
-                "accel_deg=%s%d.%02u filt_deg=%s%d.%02u gyro_dps=%s%d.%02u read_us=%u ctrl_cycles=%u missed=%u failed=%u\r\n",
-                accel_deg.p_sign, accel_deg.int_part, accel_deg.frac_part,
-                filt_deg.p_sign, filt_deg.int_part, filt_deg.frac_part,
-                gyro_dps.p_sign, gyro_dps.int_part, gyro_dps.frac_part,
-                mpu6050_get_last_read_cycles() / CYCLES_PER_US,
-                (unsigned) mpu6050_get_last_control_step_cycles(),
-                (unsigned) mpu6050_get_missed_read_count(),
-                (unsigned) mpu6050_get_failed_read_count());
+            if (!armed)
+            {
+                report_imu();
+            }
         }
 
         if (tick >= next_tick_report_tick)
         {
             next_tick_report_tick += TICK_REPORT_TICKS;
+            report_tick_timing(&window_start_cyccnt);
 
-            uint32_t const window_cycles = DWT->CYCCNT - window_start_cyccnt;
-            window_start_cyccnt = DWT->CYCCNT;
-
-            uint32_t min_cycles;
-            uint32_t max_cycles;
-            control_tick_get_interval_stats(&min_cycles, &max_cycles);
-            control_tick_reset_interval_stats();
-
-            telemetry_printf("ticks/s=1000 cycles/1000ticks=%u min_cycles=%u max_cycles=%u overruns=%u\r\n",
-                              window_cycles,
-                              min_cycles,
-                              max_cycles,
-                              (unsigned) control_tick_get_overrun_count());
+            if (armed)
+            {
+                report_logic_check("check:");
+                report_motion("motion: L");
+            }
         }
     }
 }

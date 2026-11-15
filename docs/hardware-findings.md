@@ -158,3 +158,64 @@ cannot help while RES# is held):
 - `R_IOPORT_Open()` at `BSP_WARM_START_POST_C` then sets the configured
   state: STBY/AIN1/BIN1 output-low, PWMA/PWMB on the GPTs at 0% duty.
 - `motors_init()` is the first call in `hal_entry()`, before `telemetry_init()`.
+
+## FINDING (2026-11-13): console command crashes into Default_Handler - main stack budget
+
+**Observed:** typing a console command (e.g. `skp 0`) in RTT Viewer crashed
+the firmware into `Default_Handler`.
+
+**Analysis** (GCC `-fcallgraph-info=su`, worst-case call chains; the fault
+dump from `src/safety/fault.c` is still to confirm it on hardware):
+- The main stack is 1 KB (`BSP_CFG_STACK_MAIN_BYTES`) and `MSPLIM` is set to
+  its base, so an overflow raises UsageFault STKOF, which went to
+  `Default_Handler` before `fault.c` existed.
+- The main loop needed up to **936 B** on the console path: `hal_entry`'s own
+  frame (424 B, every report's locals live at once), the console's wide
+  printf (120 B) and SEGGER's printf chain (~280 B). That left 88 B, less
+  than one FP-extended exception frame (104 B), so any interrupt at that
+  point overflowed.
+- Interrupt nesting on top: each preemption costs 104 B if the interrupted
+  code has used the FPU (the main loop always has), otherwise 32 B. Measured
+  per ISR:
+
+  | Prio | ISR | FP | Handler stack |
+  |---|---|---|---|
+  | 2 | GPT0 tick | no | 140 B |
+  | 3 | encoders IRQ7/IRQ4 | no | 16 B |
+  | 4 | echo IRQ5 | yes | 20 B |
+  | 5 | I3C (IMU callback + balance step) | yes | 280 B |
+  | 6 | ADC (battery) | yes | 112 B |
+  | 7 | button IRQ9 | no | 16 B |
+
+  Full nesting is about 1064 B on its own. The everyday case of the tick
+  preempting the I3C/balance callback is about 630 B.
+
+**Fix, keeping the 1 KB stack:**
+1. Main loop reduced to **504 B** worst case (incl. `main()`): each report
+   in `hal_entry.c` is a separate non-inlined function; the console prints
+   one field per call and only after parsing has returned; the 200 Hz CSV
+   uses `telemetry_line_*` (no printf, one atomic RTT write per row);
+   `SEGGER_RTT_PRINTF_BUFFER_SIZE` 64 -> 32.
+2. All interrupts at **one priority level** (FSP configurator), so ISRs never
+   nest: worst case = 504 + 104 (frame) + 280 (I3C/balance) = **~890 B, about
+   130 B margin**. Cost: an ISR may wait for the one running ahead of it (at
+   most the tick ISR with its 10 us trigger pulse, or the IMU callback with the
+   balance step). That's about 3 mm of echo-timestamp error, and no lost encoder
+   edges at these edge rates.
+
+The 1 Hz tick line prints `stack_free=<bytes>/<size>` from a painted stack,
+which is the measured confirmation on hardware.
+
+**Confirmed on hardware (2026-11-14):** no crash on console commands;
+`stack_free` stayed at 404/1024 while balancing and typing commands.
+
+**Update (dry-run / logic-check build):** the balance step now also plans
+the driver command and runs the logic check, so the I3C path (dispatcher +
+`mpu6050_i3c_callback` + `balance_step`) grew from 280 B to **336 B** with the
+motion check (the command record is static to keep it off the stack). Main
+loop unchanged at 504 B. New worst case 504 + 104 + 336 = **~944 B, about
+80 B margin** (measured: `stack_free=372/1024` on the dry-run build).
+Raising the stack: FSP configurator → BSP tab → Properties → RA Common →
+Main stack size (bytes), e.g. `0x1000` (4 KB; RAM use is ~6.7 KB of 40 KB
+today). `fault.c` and the `stack_free` print follow `BSP_CFG_STACK_MAIN_BYTES`
+automatically.

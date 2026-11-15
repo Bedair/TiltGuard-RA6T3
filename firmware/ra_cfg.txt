@@ -382,8 +382,8 @@ FSP Configuration
       Slave Mode: Command Response Info: GETCAP/GETHDRCAP: HDR-DDR (Mode 0): Not Supported
       Slave Mode: Command Response Info: GETCAP/GETHDRCAP: HDR-TSP (Mode 1): Not Supported
       Slave Mode: Command Response Info: GETCAP/GETHDRCAP: HDR-TSL (Mode 2): Not Supported
-      Interrupts: Interrupt Priority: Priority 5
-      Interrupts: Error and Event Interrupt Priority: Priority 5
+      Interrupts: Interrupt Priority: Priority 2
+      Interrupts: Error and Event Interrupt Priority: Priority 2
       
     Instance "g_irq_encoder_left External IRQ (r_icu)"
       Name: g_irq_encoder_left
@@ -393,7 +393,7 @@ FSP Configuration
       Filter Source: PCLK filter
       Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
       Callback: encoder_left_isr
-      Pin Interrupt Priority: Priority 3
+      Pin Interrupt Priority: Priority 2
       
     Instance "g_irq_encoder_right External IRQ (r_icu)"
       Name: g_irq_encoder_right
@@ -403,7 +403,7 @@ FSP Configuration
       Filter Source: PCLK filter
       Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
       Callback: encoder_right_isr
-      Pin Interrupt Priority: Priority 3
+      Pin Interrupt Priority: Priority 2
       
     Instance "g_irq_echo External IRQ (r_icu)"
       Name: g_irq_echo
@@ -413,7 +413,7 @@ FSP Configuration
       Filter Source: PCLK filter
       Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
       Callback: ultrasonic_echo_isr
-      Pin Interrupt Priority: Priority 4
+      Pin Interrupt Priority: Priority 2
       
     Instance "g_adc_battery ADC (r_adc)"
       General: Name: g_adc_battery
@@ -446,7 +446,7 @@ FSP Configuration
       Input: Window Compare: Window B: Lower Reference: 0
       Input: Window Compare: Window B: Upper Reference: 0
       Interrupts: Callback: battery_adc_callback
-      Interrupts: Scan End Interrupt Priority: Priority 6
+      Interrupts: Scan End Interrupt Priority: Priority 2
       Interrupts: Scan End Group B Interrupt Priority: Disabled
       Interrupts: Window Compare A Interrupt Priority: Disabled
       Interrupts: Window Compare B Interrupt Priority: Disabled
@@ -592,5 +592,5 @@ FSP Configuration
       Filter Source: PCLK filter
       Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
       Callback: button_isr
-      Pin Interrupt Priority: Priority 7
+      Pin Interrupt Priority: Priority 2
       

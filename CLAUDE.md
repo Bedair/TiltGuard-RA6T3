@@ -73,11 +73,31 @@ See `docs/hardware-findings.md` and `docs/wiring.md` for detail.
 Not used: Pmod 2, J6 (A0–A5), FPB A4/A5. Full detail (shifter channel assignments, buck converter wiring,
 grounding) in `docs/wiring.md`.
 
+## Sign conventions (also printed at boot)
+- **Forward** = the side of the robot that faces forward when it drives with pwm > 0. Defined by the motor
+  driver mapping (AIN1/BIN1 low = forward, as stock) and checked by eye with the console's `jog <pct>`.
+- **angle > 0 = tilted forward. pwm > 0 = wheel driven forward** (logged as `FWD`).
+- **Correct balance behaviour: tilted forward → both wheels drive forward**, moving under the falling body.
+- Verification, from the RTT log alone: with the speed loop off (`skp 0` + `ski 0`, or define `BALANCE_SPEED_LOOP_OFF`; the boot default is now the stock speed PI),
+  the firmware checks every armed step with |angle − setpoint| > 2° and counts wheels not commanded in the
+  direction of (angle − setpoint) as `sign_err` (steps where the D/turn terms are ≥ half the P term are not
+  checked; there an opposite direction is correct). Dry-run (`dry 1`; off at boot, `BALANCE_DRY_RUN_AT_BOOT`)
+  runs and logs the full law with the motors held off. See `tools/telemetry/README.md`.
+- **S1 (as stock):** set the robot on the floor (resting on its stand is fine) and press S1 in READY: it arms
+  within +/-22 deg of the setpoint, the angle term kicks it upright, and it balances (speed loop soft-starts after
+  0.5 s). S1 while armed disarms; after a fall (FAULT) one S1 resets and stands it up ~0.5 s later. The wheels-lifted motor self-test
+  is no longer on S1; `jog <pct>` on the console still runs it.
+- Every armed 40 ms window says whether each wheel turned (`mot L=ok`/`NONE`/...); ~0.5 s driven at >= 30%
+  with no encoder edges latches FAULT `0x4` (`SAFETY_FAULT_ENCODER`).
+
 ## Stock firmware baseline (ELEGOO Tumbller, to port first and then beat)
-- 200 Hz loop, Kalman angle filter, balance PD kp = 55 / kd = 0.75.
-- Speed PI kp = 10 / ki = 0.26, run every 8th cycle.
-- Turning kp = 2.5 / kd = 0.5.
-- Motors cut out beyond ±27°.
+- 200 Hz loop, Kalman angle filter, balance PD kp = 55 / kd = 0.75, angle_zero = 0.
+- Speed PI kp = 10 / ki = 0.26, run every 8th cycle (40 ms), integral clamped to ±3000.
+- Turning kd = 0.5 on the yaw rate. `kp_turn = 2.5` is declared but **never used**.
+- Motors cut out beyond **±22°** (the ±27° values in the source are commented out).
+- IMU: ±250 dps / ±2 g, DLPF 260 Hz (power-on default; `mpu.initialize()` never writes CONFIG).
+  `Gyro_z = -gz / 131` is integer division (truncated to whole deg/s), with no bias removed.
+- Ported in `src/control/balance.{c,h}`; that header lists every deliberate difference.
 - Battery thresholds: full above 7.8 V, low below 7.0 V.
 - The stock gains are in 8-bit PWM units at about 490 Hz. Rescale them for the RA6T3's PWM resolution.
 

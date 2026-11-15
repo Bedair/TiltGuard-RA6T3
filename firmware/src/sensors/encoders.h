@@ -57,6 +57,11 @@ fsp_err_t encoders_init(void);
  * counts-per-5ms delta for both wheels. Integer-only, no float math. */
 void encoders_on_tick(void);
 
+/* Raw unsigned edge totals since boot. Two single-word reads, no locking -
+ * cheap enough for the IMU callback (balance step). Wraps at 2^32; use
+ * unsigned differences. */
+void encoders_get_totals(uint32_t * p_left, uint32_t * p_right);
+
 /* Consistent snapshot, safe to call from the main loop. Computes rev/s from
  * the latest counts-per-5ms at call time. */
 void encoders_get_snapshot(encoders_snapshot_t * p_snapshot);

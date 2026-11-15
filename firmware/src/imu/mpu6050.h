@@ -35,6 +35,7 @@ typedef struct st_mpu6050_angle
     float accel_angle_deg;    /* atan2(accel_y, accel_z), degrees. No bias, but noisy. */
     float filtered_angle_deg; /* Complementary filter output, degrees. */
     float gyro_rate_dps;      /* Bias-corrected gyro_x rate, degrees/second. */
+    float gyro_z_dps;         /* Bias-corrected gyro_z (yaw) rate, degrees/second, sensor sign. */
 } mpu6050_angle_t;
 
 /* mpu6050_get_bus_recovery_result(): 0..9 = SCL clocks needed to free SDA
@@ -49,7 +50,7 @@ uint32_t mpu6050_get_bus_recovery_result(void);
  * Runs I2C bus recovery (frees an SDA left held low by a mid-transfer
  * reset), then opens g_i3c_imu, checks WHO_AM_I, wakes the device onto the gyro-X PLL
  * clock, configures DLPF/sample-rate/full-scale, and averages ~1 s of
- * gyro_x samples for the bias (robot must be held still). All I3C
+ * gyro_x/gyro_z samples for the biases (robot must be held still). All I3C
  * transactions here are blocking (polled) since the 1 kHz tick is not
  * running yet. Checks every fsp_err_t and returns the first failure.
  */

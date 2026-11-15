@@ -17,7 +17,7 @@ const external_irq_cfg_t g_irq_button_cfg =
   .p_context = (void*) &NULL,
 #endif
   .p_extend = (void*) &g_irq_button_ext_cfg,
-  .ipl = (7),
+  .ipl = (2),
 #if defined(VECTOR_NUMBER_ICU_IRQ9)
     .irq                 = VECTOR_NUMBER_ICU_IRQ9,
 #else
@@ -44,7 +44,7 @@ const external_irq_cfg_t g_irq_echo_cfg =
   .p_context = (void*) &NULL,
 #endif
   .p_extend = (void*) &g_irq_echo_ext_cfg,
-  .ipl = (4),
+  .ipl = (2),
 #if defined(VECTOR_NUMBER_ICU_IRQ5)
     .irq                 = VECTOR_NUMBER_ICU_IRQ5,
 #else
@@ -71,7 +71,7 @@ const external_irq_cfg_t g_irq_encoder_right_cfg =
   .p_context = (void*) &NULL,
 #endif
   .p_extend = (void*) &g_irq_encoder_right_ext_cfg,
-  .ipl = (3),
+  .ipl = (2),
 #if defined(VECTOR_NUMBER_ICU_IRQ4)
     .irq                 = VECTOR_NUMBER_ICU_IRQ4,
 #else
@@ -98,7 +98,7 @@ const external_irq_cfg_t g_irq_encoder_left_cfg =
   .p_context = (void*) &NULL,
 #endif
   .p_extend = (void*) &g_irq_encoder_left_ext_cfg,
-  .ipl = (3),
+  .ipl = (2),
 #if defined(VECTOR_NUMBER_ICU_IRQ7)
     .irq                 = VECTOR_NUMBER_ICU_IRQ7,
 #else

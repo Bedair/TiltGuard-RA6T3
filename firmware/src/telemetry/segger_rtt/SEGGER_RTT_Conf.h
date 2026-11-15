@@ -96,11 +96,11 @@ Revision: $Rev: 24316 $
 #endif
 
 #ifndef   BUFFER_SIZE_DOWN
-  #define BUFFER_SIZE_DOWN                          (16)    // Size of the buffer for terminal input to target from host (Usually keyboard input) (Default: 16)
+  #define BUFFER_SIZE_DOWN                          (64)    // TiltGuard: 64 (default 16) so a whole console line ("ski 0.26\r\n" etc.) fits even if RTT Viewer sends it at once
 #endif
 
 #ifndef   SEGGER_RTT_PRINTF_BUFFER_SIZE
-  #define SEGGER_RTT_PRINTF_BUFFER_SIZE             (64u)    // Size of buffer for RTT printf to bulk-send chars via RTT     (Default: 64)
+  #define SEGGER_RTT_PRINTF_BUFFER_SIZE             (32u)    // TiltGuard: 32 (default 64). It lives on the 1 KB main stack in every telemetry_printf(); 32 just flushes more often
 #endif
 
 #ifndef   SEGGER_RTT_MODE_DEFAULT

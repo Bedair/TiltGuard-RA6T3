@@ -93,6 +93,12 @@ void encoders_on_tick (void)
     s_right_prev_total = right_now;
 }
 
+void encoders_get_totals (uint32_t * p_left, uint32_t * p_right)
+{
+    *p_left  = s_left_total;
+    *p_right = s_right_total;
+}
+
 void encoders_get_snapshot (encoders_snapshot_t * p_snapshot)
 {
     uint32_t const primask = __get_PRIMASK();

@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include "mpu6050.h"
 #include "hal_data.h"
+#include "../control/balance.h"
 
 /* MPU-6050 register map (subset used here). */
 #define MPU6050_REG_SMPLRT_DIV     (0x19U)
@@ -36,8 +37,21 @@
 #define MPU6050_GYRO_CAL_DURATION_CYCLES  (200000000U)
 #define MPU6050_BLOCKING_TIMEOUT_CYCLES   (2000000U)
 
-#define MPU6050_COMPLEMENTARY_FILTER_ALPHA (0.98f)
 #define MPU6050_FILTER_DT_S                (0.001f) /* 1 kHz tick. */
+
+/* Complementary filter time constant: below ~1/(2*pi*tau) the angle follows
+ * the accelerometer, above it the integrated gyro. On the floor the wheels
+ * accelerate the robot hard, and atan2(ay, az) reads that horizontal
+ * acceleration as tilt (~6 deg per 1 m/s^2), so the accel must only correct
+ * slow gyro drift. The stock Kalman filter (Q_angle 0.001, R_angle 0.5,
+ * dt 5 ms) settles to an accel gain of ~0.003 per step, i.e. tau ~1.5 s.
+ * The old alpha 0.98 at 1 kHz was tau = 49 ms: fine lifted, but on the floor
+ * the wheel acceleration fed straight into the angle (3-5 Hz oscillation in
+ * the first floor test). tau = 1 s: alpha = tau / (tau + dt) = 0.999. A
+ * residual gyro bias b gives a steady error of b * tau (0.1 dps -> 0.1 deg). */
+#define MPU6050_COMPLEMENTARY_FILTER_TAU_S (1.0f)
+#define MPU6050_COMPLEMENTARY_FILTER_ALPHA \
+    (MPU6050_COMPLEMENTARY_FILTER_TAU_S / (MPU6050_COMPLEMENTARY_FILTER_TAU_S + MPU6050_FILTER_DT_S))
 
 typedef enum e_mpu6050_phase
 {
@@ -53,6 +67,7 @@ typedef struct st_mpu6050_raw_sample
     int16_t accel_y;
     int16_t accel_z;
     int16_t gyro_x;
+    int16_t gyro_z;
 } mpu6050_raw_sample_t;
 
 /* Transfer state machine, shared by the blocking init helpers and the tick-driven path. */
@@ -80,6 +95,7 @@ static mpu6050_raw_sample_t s_latest_raw;
 /* Filter state. Written from the I3C read-complete callback (ISR, priority
  * 5), read via mpu6050_get_angle()'s snapshot from the main loop. */
 static float                    s_gyro_x_bias_raw;
+static float                    s_gyro_z_bias_raw;
 static volatile mpu6050_angle_t s_angle;
 static volatile uint32_t        s_last_control_step_cycles;
 
@@ -269,9 +285,10 @@ static fsp_err_t mpu6050_blocking_read_regs (uint8_t reg, uint8_t * p_buffer, ui
 
 static fsp_err_t mpu6050_calibrate_gyro_bias (void)
 {
-    int64_t  sum           = 0;
+    int64_t  sum_x          = 0;
+    int64_t  sum_z          = 0;
     uint32_t count          = 0U;
-    uint8_t  buffer[2];
+    uint8_t  buffer[6];     /* GYRO_XOUT_H..GYRO_ZOUT_L. */
     uint32_t const start_cyccnt = DWT->CYCCNT;
 
     while ((DWT->CYCCNT - start_cyccnt) < MPU6050_GYRO_CAL_DURATION_CYCLES)
@@ -284,7 +301,9 @@ static fsp_err_t mpu6050_calibrate_gyro_bias (void)
         }
 
         int16_t const gx_raw = (int16_t) ((uint16_t) ((buffer[0] << 8) | buffer[1]));
-        sum  += gx_raw;
+        int16_t const gz_raw = (int16_t) ((uint16_t) ((buffer[4] << 8) | buffer[5]));
+        sum_x += gx_raw;
+        sum_z += gz_raw;
         count++;
     }
 
@@ -293,7 +312,8 @@ static fsp_err_t mpu6050_calibrate_gyro_bias (void)
         return FSP_ERR_TIMEOUT;
     }
 
-    s_gyro_x_bias_raw = (float) sum / (float) count;
+    s_gyro_x_bias_raw = (float) sum_x / (float) count;
+    s_gyro_z_bias_raw = (float) sum_z / (float) count;
 
     return FSP_SUCCESS;
 }
@@ -311,6 +331,7 @@ fsp_err_t mpu6050_init (void)
     s_angle.accel_angle_deg    = 0.0f;
     s_angle.filtered_angle_deg = 0.0f;
     s_angle.gyro_rate_dps      = 0.0f;
+    s_angle.gyro_z_dps         = 0.0f;
 
     fsp_err_t err = mpu6050_bus_recover();
 
@@ -392,16 +413,20 @@ fsp_err_t mpu6050_init (void)
         return err;
     }
 
-    /* DLPF ~98 Hz (DLPF_CFG = 2; use 0x01 instead for ~188 Hz / lower latency). */
-    err = mpu6050_blocking_write_reg(MPU6050_REG_CONFIG, 0x02U);
+    /* DLPF_CFG = 0: accel 260 Hz / gyro 256 Hz bandwidth, the power-on
+     * default the stock ELEGOO firmware runs with (its mpu.initialize()
+     * never writes CONFIG). With DLPF_CFG = 0 the gyro output rate is
+     * 8 kHz instead of 1 kHz, so SMPLRT_DIV below changes with it. */
+    err = mpu6050_blocking_write_reg(MPU6050_REG_CONFIG, 0x00U);
 
     if (FSP_SUCCESS != err)
     {
         return err;
     }
 
-    /* Sample rate = Gyro_Output_Rate / (1 + SMPLRT_DIV) = 1 kHz / (1 + 0) = 1 kHz. */
-    err = mpu6050_blocking_write_reg(MPU6050_REG_SMPLRT_DIV, 0x00U);
+    /* Sample rate = Gyro_Output_Rate / (1 + SMPLRT_DIV) = 8 kHz / (1 + 7) = 1 kHz,
+     * matching the 1 kHz read tick. (The accelerometer outputs 1 kHz regardless.) */
+    err = mpu6050_blocking_write_reg(MPU6050_REG_SMPLRT_DIV, 0x07U);
 
     if (FSP_SUCCESS != err)
     {
@@ -489,6 +514,7 @@ static void mpu6050_tick_transfer_succeeded (uint8_t const * p_data, uint32_t le
         raw.accel_y = (int16_t) ((uint16_t) ((p_data[2] << 8) | p_data[3]));
         raw.accel_z = (int16_t) ((uint16_t) ((p_data[4] << 8) | p_data[5]));
         raw.gyro_x  = (int16_t) ((uint16_t) ((p_data[8] << 8) | p_data[9]));
+        raw.gyro_z  = (int16_t) ((uint16_t) ((p_data[12] << 8) | p_data[13]));
 
         s_latest_raw = raw;
         s_sequence++;
@@ -501,6 +527,7 @@ static void mpu6050_tick_transfer_succeeded (uint8_t const * p_data, uint32_t le
 
         float const accel_angle_deg = atan2f((float) raw.accel_y, (float) raw.accel_z) * MPU6050_RAD_TO_DEG;
         float const gyro_rate_dps   = ((float) raw.gyro_x - s_gyro_x_bias_raw) / MPU6050_GYRO_SENSITIVITY_LSB_PER_DPS;
+        float const gyro_z_dps      = ((float) raw.gyro_z - s_gyro_z_bias_raw) / MPU6050_GYRO_SENSITIVITY_LSB_PER_DPS;
 
         float const filtered_angle_deg =
             (MPU6050_COMPLEMENTARY_FILTER_ALPHA * (s_angle.filtered_angle_deg + (gyro_rate_dps * MPU6050_FILTER_DT_S)))
@@ -509,6 +536,12 @@ static void mpu6050_tick_transfer_succeeded (uint8_t const * p_data, uint32_t le
         s_angle.accel_angle_deg    = accel_angle_deg;
         s_angle.filtered_angle_deg = filtered_angle_deg;
         s_angle.gyro_rate_dps      = gyro_rate_dps;
+        s_angle.gyro_z_dps         = gyro_z_dps;
+
+        /* Balance control law on this fresh sample (src/control/balance.c).
+         * It gates itself on the safety state; it doesn't touch the motors
+         * unless balancing is enabled and the robot is ACTIVE. */
+        balance_step(filtered_angle_deg, gyro_rate_dps, gyro_z_dps);
 
         s_last_control_step_cycles = DWT->CYCCNT - control_step_start;
     }

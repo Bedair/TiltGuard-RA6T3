@@ -334,8 +334,8 @@
       <property id="module.driver.i3c.hdr_ddr" value="enum.driver.i3c.hdr_ddr.disabled"/>
       <property id="module.driver.i3c.hdr_tsp" value="enum.driver.i3c.hdr_tsp.disabled"/>
       <property id="module.driver.i3c.hdr_tsl" value="enum.driver.i3c.hdr_tsl.disabled"/>
-      <property id="module.driver.i3c.ipl" value="board.icu.common.irq.priority5"/>
-      <property id="module.driver.i3c.eei_ipl" value="board.icu.common.irq.priority5"/>
+      <property id="module.driver.i3c.ipl" value="board.icu.common.irq.priority2"/>
+      <property id="module.driver.i3c.eei_ipl" value="board.icu.common.irq.priority2"/>
     </module>
     <module id="module.driver.external_irq_on_icu.1224444696">
       <property id="module.driver.external_irq.name" value="g_irq_encoder_left"/>
@@ -345,7 +345,7 @@
       <property id="module.driver.external_irq.filter_source" value="module.driver.external_irq.filter_source.pclk"/>
       <property id="module.driver.external_irq.clock_source_div" value="module.driver.external_irq.clock_source_div.clock_source_div_by_64"/>
       <property id="module.driver.external_irq.p_callback" value="encoder_left_isr"/>
-      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority3"/>
+      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority2"/>
     </module>
     <module id="module.driver.external_irq_on_icu.1845939977">
       <property id="module.driver.external_irq.name" value="g_irq_encoder_right"/>
@@ -355,7 +355,7 @@
       <property id="module.driver.external_irq.filter_source" value="module.driver.external_irq.filter_source.pclk"/>
       <property id="module.driver.external_irq.clock_source_div" value="module.driver.external_irq.clock_source_div.clock_source_div_by_64"/>
       <property id="module.driver.external_irq.p_callback" value="encoder_right_isr"/>
-      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority3"/>
+      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority2"/>
     </module>
     <module id="module.driver.external_irq_on_icu.1837300551">
       <property id="module.driver.external_irq.name" value="g_irq_echo"/>
@@ -365,7 +365,7 @@
       <property id="module.driver.external_irq.filter_source" value="module.driver.external_irq.filter_source.pclk"/>
       <property id="module.driver.external_irq.clock_source_div" value="module.driver.external_irq.clock_source_div.clock_source_div_by_64"/>
       <property id="module.driver.external_irq.p_callback" value="ultrasonic_echo_isr"/>
-      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority4"/>
+      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority2"/>
     </module>
     <module id="module.driver.adc_on_adc.1486887160">
       <property id="module.driver.adc.name" value="g_adc_battery"/>
@@ -398,7 +398,7 @@
       <property id="module.driver.adc.compare.window_b.ref_lower" value="0"/>
       <property id="module.driver.adc.compare.window_b.ref_upper" value="0"/>
       <property id="module.driver.adc.p_callback" value="battery_adc_callback"/>
-      <property id="module.driver.adc.scan_end_ipl" value="board.icu.common.irq.priority6"/>
+      <property id="module.driver.adc.scan_end_ipl" value="board.icu.common.irq.priority2"/>
       <property id="module.driver.adc.scan_end_b_ipl" value="_disabled"/>
       <property id="module.driver.adc.window_a_ipl" value="_disabled"/>
       <property id="module.driver.adc.window_b_ipl" value="_disabled"/>
@@ -544,7 +544,7 @@
       <property id="module.driver.external_irq.filter_source" value="module.driver.external_irq.filter_source.pclk"/>
       <property id="module.driver.external_irq.clock_source_div" value="module.driver.external_irq.clock_source_div.clock_source_div_by_64"/>
       <property id="module.driver.external_irq.p_callback" value="button_isr"/>
-      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority7"/>
+      <property id="module.driver.external_irq.ipl" value="board.icu.common.irq.priority2"/>
     </module>
     <context id="_hal.0">
       <stack module="module.driver.ioport_on_ioport.0"/>

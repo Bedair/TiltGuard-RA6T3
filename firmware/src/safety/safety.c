@@ -6,7 +6,7 @@
 #include "safety.h"
 #include "../actuators/motors.h"
 
-static safety_state_t s_state;
+static volatile safety_state_t s_state; /* Read from the balance step (ISR). */
 static uint32_t        s_fault_reasons;
 static uint32_t        s_warnings;
 static bool            s_active_requested;
@@ -16,7 +16,16 @@ static uint32_t s_ticks_since_imu_update;
 static uint32_t s_last_imu_failed_read_count;
 static uint32_t s_last_echo_timeout_count;
 static uint32_t s_last_tick_overrun_count;
+static uint32_t s_last_motor_error_count;
+static uint32_t s_last_stall_fault_count;
 static uint32_t s_calibration_ticks_remaining;
+
+/* The counters passed to safety_update() are monotonic totals since boot,
+ * not since the last reset. After init/reset, the first update only records
+ * them as the baseline - otherwise any failure that happened before a
+ * safety_reset() would look like a new increment and re-latch FAULT
+ * immediately, making FAULT unrecoverable without a reboot. */
+static bool s_baseline_pending;
 
 void safety_init (void)
 {
@@ -29,7 +38,10 @@ void safety_init (void)
     s_last_imu_failed_read_count  = 0U;
     s_last_echo_timeout_count     = 0U;
     s_last_tick_overrun_count     = 0U;
+    s_last_motor_error_count      = 0U;
+    s_last_stall_fault_count      = 0U;
     s_calibration_ticks_remaining = SAFETY_CALIBRATION_TICKS;
+    s_baseline_pending            = true;
 }
 
 void safety_request_active (void)
@@ -71,8 +83,21 @@ void safety_update (float    tilt_angle_deg,
                      uint32_t imu_sequence,
                      uint32_t imu_failed_read_count,
                      uint32_t echo_timeout_count,
-                     uint32_t tick_overrun_count)
+                     uint32_t tick_overrun_count,
+                     uint32_t motor_error_count,
+                     uint32_t stall_fault_count)
 {
+    if (s_baseline_pending)
+    {
+        s_baseline_pending           = false;
+        s_last_imu_sequence          = imu_sequence;
+        s_last_imu_failed_read_count = imu_failed_read_count;
+        s_last_echo_timeout_count    = echo_timeout_count;
+        s_last_tick_overrun_count    = tick_overrun_count;
+        s_last_motor_error_count     = motor_error_count;
+        s_last_stall_fault_count     = stall_fault_count;
+    }
+
     if (imu_sequence != s_last_imu_sequence)
     {
         s_last_imu_sequence      = imu_sequence;
@@ -92,6 +117,12 @@ void safety_update (float    tilt_angle_deg,
     bool const tick_overrun_this_tick = (tick_overrun_count != s_last_tick_overrun_count);
     s_last_tick_overrun_count = tick_overrun_count;
 
+    bool const motor_error_this_tick = (motor_error_count != s_last_motor_error_count);
+    s_last_motor_error_count = motor_error_count;
+
+    bool const stall_this_tick = (stall_fault_count != s_last_stall_fault_count);
+    s_last_stall_fault_count = stall_fault_count;
+
     s_warnings = echo_timed_out_this_tick ? SAFETY_WARNING_ECHO_TIMEOUT : 0U;
 
     uint32_t new_faults = 0U;
@@ -109,6 +140,16 @@ void safety_update (float    tilt_angle_deg,
     if (tick_overrun_this_tick)
     {
         new_faults |= SAFETY_FAULT_TICK_OVERRUN;
+    }
+
+    if (motor_error_this_tick)
+    {
+        new_faults |= SAFETY_FAULT_ACTUATOR;
+    }
+
+    if (stall_this_tick)
+    {
+        new_faults |= SAFETY_FAULT_ENCODER;
     }
 
     if (0U != new_faults)
