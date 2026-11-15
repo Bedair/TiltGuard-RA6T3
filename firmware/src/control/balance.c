@@ -20,6 +20,17 @@ static balance_params_t s_params;
 static volatile bool    s_enabled;
 static volatile bool    s_dry_run;
 
+/* Drive setpoints: written by the main loop (masked), read by the ISR. */
+typedef struct st_balance_targets
+{
+    float speed; /* Counts per 40 ms. */
+    float turn;  /* 8-bit PWM units. */
+} balance_targets_t;
+
+static balance_targets_t s_targets;
+static float             s_status_speed_target; /* Targets in effect this step, ISR-only. */
+static float             s_status_turn_target;
+
 /* Controller state, ISR-only. */
 static uint32_t s_enc_left_prev_total;
 static uint32_t s_enc_right_prev_total;
@@ -324,6 +335,8 @@ void balance_init (void)
     s_params.speed_kp      = BALANCE_SPEED_KP_DEFAULT;
     s_params.speed_ki      = BALANCE_SPEED_KI_DEFAULT;
     s_params.turn_kd       = BALANCE_TURN_KD_DEFAULT;
+    s_targets.speed        = 0.0f;
+    s_targets.turn         = 0.0f;
     balance_reset_state();
     s_was_armed = false;
     (void) memset(&s_check, 0, sizeof(s_check));
@@ -391,7 +404,9 @@ void balance_step (float angle_deg, float gyro_x_dps, float gyro_z_dps)
     if (!armed)
     {
         balance_reset_state();
-        s_was_armed = false;
+        s_was_armed           = false;
+        s_status_speed_target = 0.0f;
+        s_status_turn_target  = 0.0f;
         motors_plan(0, 0, p_command); /* STOP: nothing is commanded while not armed. */
     }
     else
@@ -439,6 +454,14 @@ void balance_step (float angle_deg, float gyro_x_dps, float gyro_z_dps)
 
         s_speed_step_count++;
 
+        /* Drive/turn setpoints only once the soft start is over (see balance_set_targets()). */
+        bool const  targets_on   = (s_armed_steps >= (BALANCE_SPEED_START_DELAY_STEPS + BALANCE_SPEED_START_RAMP_STEPS));
+        float const speed_target = targets_on ? s_targets.speed : 0.0f;
+        float const turn_target  = targets_on ? s_targets.turn : 0.0f;
+
+        s_status_speed_target = speed_target;
+        s_status_turn_target  = turn_target;
+
         if (s_speed_step_count >= BALANCE_SPEED_PERIOD_STEPS)
         {
             s_speed_step_count = 0U;
@@ -455,26 +478,27 @@ void balance_step (float angle_deg, float gyro_x_dps, float gyro_z_dps)
 
             s_speed_filter = (s_speed_filter * BALANCE_SPEED_FILTER_OLD) + (car_speed * BALANCE_SPEED_FILTER_NEW);
 
-            /* Stock: integral += speed_filter; integral += -setting_car_speed (0 here).
+            /* Stock: integral += speed_filter; integral += -setting_car_speed.
              * Difference from stock - anti-windup: the integral enters the
              * command as +ski*integral, so while both wheels are already
-             * clamped at full duty in the direction this window's speed would
+             * clamped at full duty in the direction this window's term would
              * push it further, don't integrate. Otherwise it winds up to the
              * clamp during a saturated run-away and the robot can't recover. */
-            bool const saturated_fwd = (s_pwm_left >= BALANCE_PWM_LIMIT_8BIT) && (s_pwm_right >= BALANCE_PWM_LIMIT_8BIT);
-            bool const saturated_rev = (s_pwm_left <= -BALANCE_PWM_LIMIT_8BIT) && (s_pwm_right <= -BALANCE_PWM_LIMIT_8BIT);
-            bool const windup        = (saturated_fwd && (s_speed_filter > 0.0f)) || (saturated_rev && (s_speed_filter < 0.0f));
+            float const integrand     = s_speed_filter - speed_target;
+            bool const  saturated_fwd = (s_pwm_left >= BALANCE_PWM_LIMIT_8BIT) && (s_pwm_right >= BALANCE_PWM_LIMIT_8BIT);
+            bool const  saturated_rev = (s_pwm_left <= -BALANCE_PWM_LIMIT_8BIT) && (s_pwm_right <= -BALANCE_PWM_LIMIT_8BIT);
+            bool const  windup        = (saturated_fwd && (integrand > 0.0f)) || (saturated_rev && (integrand < 0.0f));
 
             if (!windup)
             {
-                s_speed_integral = balance_clamp(s_speed_integral + s_speed_filter, BALANCE_SPEED_INTEGRAL_LIMIT);
+                s_speed_integral = balance_clamp(s_speed_integral + integrand, BALANCE_SPEED_INTEGRAL_LIMIT);
             }
 
             s_speed_out = (-p.speed_kp * s_speed_filter) - (p.speed_ki * s_speed_integral);
 
-            /* Stock: setting_turn_speed (0 here) + kd_turn * Gyro_z, with Gyro_z = -gz / 131. */
+            /* Stock: setting_turn_speed + kd_turn * Gyro_z, with Gyro_z = -gz / 131. */
             float const yaw_rate_stock_dps = -gyro_z_dps;
-            s_turn_out = p.turn_kd * yaw_rate_stock_dps;
+            s_turn_out = turn_target + (p.turn_kd * yaw_rate_stock_dps);
         }
 
         if (s_armed_steps < (BALANCE_SPEED_START_DELAY_STEPS + BALANCE_SPEED_START_RAMP_STEPS))
@@ -538,6 +562,8 @@ void balance_step (float angle_deg, float gyro_x_dps, float gyro_z_dps)
     s_status.bal_8bit         = balance_out; /* Unclamped, for tuning. */
     s_status.spd_8bit         = s_speed_out;
     s_status.turn_8bit        = s_turn_out;
+    s_status.speed_target     = s_status_speed_target;
+    s_status.turn_target      = s_status_turn_target;
     s_status.speed_integral   = s_speed_integral;
     s_status.command          = *p_command;
     s_status.enc_left_window  = s_enc_left_last_window;
@@ -554,6 +580,16 @@ void balance_step (float angle_deg, float gyro_x_dps, float gyro_z_dps)
     s_status.motion_count_left  = s_motion_left.count;
     s_status.motion_count_right = s_motion_right.count;
     s_status.step_count       = s_step_count;
+}
+
+void balance_set_targets (float speed_target, float turn_target)
+{
+    uint32_t const primask = __get_PRIMASK();
+
+    __disable_irq();
+    s_targets.speed = speed_target;
+    s_targets.turn  = turn_target;
+    __set_PRIMASK(primask);
 }
 
 void balance_get_params (balance_params_t * p_params)

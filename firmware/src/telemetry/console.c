@@ -10,6 +10,7 @@
 #include "telemetry.h"
 #include "../control/balance.h"
 #include "../control/jog.h"
+#include "../control/drive.h"
 #include "../safety/safety.h"
 #include "blackbox.h"
 
@@ -223,7 +224,9 @@ void console_print_speed_loop (void)
 static void console_print_help (void)
 {
     telemetry_printf("commands: kp <v> | kd <v> | sp <deg> | skp <v> | ski <v> | tkd <v> | "
-                     "dry <0|1> | jog <1..%d> | dump | show | help  (space optional: 'skp0')\r\n", JOG_MAX_PERCENT);
+                     "dry <0|1> | jog <1..%d> | drv <-%d..%d> | trn <-%d..%d> | stop | dump | show | help  "
+                     "(space optional: 'skp0')\r\n",
+                     JOG_MAX_PERCENT, DRIVE_SPEED_MAX, DRIVE_SPEED_MAX, DRIVE_TURN_MAX, DRIVE_TURN_MAX);
 }
 
 static __attribute__((noinline)) void console_reject_range (console_param_def_t const * p_def)
@@ -245,7 +248,25 @@ typedef enum e_console_reply
     CONSOLE_REPLY_MODE,
     CONSOLE_REPLY_JOG,
     CONSOLE_REPLY_DUMP,
+    CONSOLE_REPLY_DRIVE,
+    CONSOLE_REPLY_TURN,
+    CONSOLE_REPLY_STOP,
 } console_reply_t;
+
+static int32_t s_pending_drive_value; /* drv/trn value, handed from console_execute() to console_reply(). */
+
+/* "drv"/"trn": a whole number; reports and returns NONE if malformed. */
+static console_reply_t console_parse_drive (const char * p_value, const char * p_name, console_reply_t reply)
+{
+    if ((NULL == p_value) || (!console_parse_int(p_value, &s_pending_drive_value)))
+    {
+        telemetry_printf("rejected: '%s' needs a whole number, e.g. '%s 40' or '%s -40'\r\n", p_name, p_name, p_name);
+
+        return CONSOLE_REPLY_NONE;
+    }
+
+    return reply; /* drive.c checks the state and the range, and prints. */
+}
 
 static void console_apply (console_param_def_t const * p_def, float value)
 {
@@ -379,6 +400,21 @@ static __attribute__((noinline)) console_reply_t console_execute (char * p_line)
         return CONSOLE_REPLY_DUMP;
     }
 
+    if ((NULL == p_value) && console_name_is(p_line, name_length, "stop"))
+    {
+        return CONSOLE_REPLY_STOP;
+    }
+
+    if (console_name_is(p_line, name_length, "drv"))
+    {
+        return console_parse_drive(p_value, "drv", CONSOLE_REPLY_DRIVE);
+    }
+
+    if (console_name_is(p_line, name_length, "trn"))
+    {
+        return console_parse_drive(p_value, "trn", CONSOLE_REPLY_TURN);
+    }
+
     if (console_name_is(p_line, name_length, "dry"))
     {
         return console_execute_dry(p_value);
@@ -463,6 +499,24 @@ static __attribute__((noinline)) void console_reply (console_reply_t reply)
         case CONSOLE_REPLY_DUMP:
         {
             blackbox_dump_start(); /* Checks the state and the CRC, and prints. */
+            break;
+        }
+
+        case CONSOLE_REPLY_DRIVE:
+        {
+            drive_command_speed(s_pending_drive_value);
+            break;
+        }
+
+        case CONSOLE_REPLY_TURN:
+        {
+            drive_command_turn(s_pending_drive_value);
+            break;
+        }
+
+        case CONSOLE_REPLY_STOP:
+        {
+            drive_stop();
             break;
         }
 

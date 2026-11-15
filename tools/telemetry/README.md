@@ -139,6 +139,9 @@ is echoed back.
 | `tkd <v>` | turn (yaw-rate) D | 0.5 | 0..10 |
 | `dry <0\|1>` | dry-run off/on: armed, the law runs and logs, motors stay off | 0 (off; `BALANCE_DRY_RUN_AT_BOOT`) | refused while armed |
 | `jog <pct>` | both wheels at +pct duty for 1 s, then stop; prints per-wheel encoder edges with a `moved` / `DID NOT MOVE` verdict and a pin/timer readback. Direction still needs an eye: they must roll FORWARD | | 1..20, READY only (works in dry-run) |
+| `drv <v>` | drive: speed target in encoder counts per 40 ms (+ = FWD, the way `jog` rolls). Stock uses 40 (default) / 80 (Bluetooth). Held 2 s, then back to 0 - resend to keep going | 0 | -80..80, armed only, active 1.5 s after arming |
+| `trn <v>` | turn: PWM offset, stock 8-bit units (+ = right wheel faster). Stock uses 50 / 80. Held 2 s | 0 | -80..80, armed only |
+| `stop` | both drive targets to 0 now | | |
 | `dump` | print the black-box recording as CSV on channel 1 (see above) | | not while armed |
 | `show` | print all parameters | | |
 | `help` | list commands | | |

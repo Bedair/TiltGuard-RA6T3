@@ -24,6 +24,18 @@
 #include "bsp_api.h"
 #include "r_external_irq_api.h"
 
+/*
+ * 0 (default since 2026-11-15): the ultrasonic is not used. P410/D0 is now
+ * the Bluetooth module's RX (SCI0 RXD0, remote/bt_remote.c) and the
+ * g_irq_echo (IRQ5) stack is removed from the FSP configuration. The API
+ * stays, with stubs: init only drives Trig low, the tick does nothing, and the
+ * snapshot reports no distance and no timeouts (so no echo warnings).
+ * Re-enabling needs the g_irq_echo stack back AND another pin for the BT RX.
+ */
+#ifndef ULTRASONIC_ENABLED
+ #define ULTRASONIC_ENABLED (0)
+#endif
+
 typedef struct st_ultrasonic_snapshot
 {
     float    distance_cm;
@@ -46,8 +58,10 @@ void ultrasonic_on_tick(void);
 /* Consistent snapshot, safe to call from the main loop. */
 void ultrasonic_get_snapshot(ultrasonic_snapshot_t * p_snapshot);
 
-#ifndef ultrasonic_echo_isr
+#if ULTRASONIC_ENABLED
+ #ifndef ultrasonic_echo_isr
 void ultrasonic_echo_isr(external_irq_callback_args_t * p_args);
+ #endif
 #endif
 
 #endif /* ULTRASONIC_H_ */

@@ -1,11 +1,16 @@
 /*
  * ultrasonic.c
+ *
+ * ULTRASONIC_ENABLED (ultrasonic.h) is 0 by default: only the stubs at the
+ * bottom are built. See ultrasonic.h.
  */
 
 #include "ultrasonic.h"
 #include "hal_data.h"
 
 #define ULTRASONIC_TRIG_PIN              (BSP_IO_PORT_01_PIN_09) /* P109 / D11. */
+
+#if ULTRASONIC_ENABLED
 
 #define ULTRASONIC_TRIGGER_PERIOD_TICKS  (50U)                   /* 50 ms. */
 #define ULTRASONIC_TRIGGER_PULSE_CYCLES  (2000U)                 /* 10 us @ 200 MHz. */
@@ -131,3 +136,31 @@ void ultrasonic_get_snapshot (ultrasonic_snapshot_t * p_snapshot)
     p_snapshot->echo_isr_entries = s_echo_isr_entries;
     __set_PRIMASK(primask);
 }
+
+#else /* !ULTRASONIC_ENABLED: stubs. */
+
+fsp_err_t ultrasonic_init (void)
+{
+    /* Trig stays a low output (its pin config is unchanged); no echo IRQ. */
+    R_BSP_PinAccessEnable();
+    R_BSP_PinWrite(ULTRASONIC_TRIG_PIN, BSP_IO_LEVEL_LOW);
+    R_BSP_PinAccessDisable();
+
+    return FSP_SUCCESS;
+}
+
+void ultrasonic_on_tick (void)
+{
+    /* Disabled. */
+}
+
+void ultrasonic_get_snapshot (ultrasonic_snapshot_t * p_snapshot)
+{
+    p_snapshot->distance_cm      = 0.0f;
+    p_snapshot->distance_valid   = false;
+    p_snapshot->timeout_count    = 0U; /* No timeouts: no echo warnings for the safety monitor. */
+    p_snapshot->sequence         = 0U;
+    p_snapshot->echo_isr_entries = 0U;
+}
+
+#endif /* ULTRASONIC_ENABLED */

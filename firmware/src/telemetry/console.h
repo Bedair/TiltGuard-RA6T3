@@ -12,6 +12,9 @@
  *   tkd <v>   turn (yaw) D       (0 .. 10)
  *   dry <0|1> dry-run off/on (default off, BALANCE_DRY_RUN_AT_BOOT); refused while armed
  *   jog <pct> both wheels at +pct (1 .. 20) for 1 s; READY only, works in dry-run
+ *   drv <v>   speed target, counts/40 ms (-80 .. 80), held 2 s; armed only (control/drive.h)
+ *   trn <v>   turn offset, 8-bit units (-80 .. 80), held 2 s; armed only
+ *   stop      both drive targets to 0
  *   dump      black-box recording as CSV on channel 1 (telemetry/blackbox.h); not while armed
  *   show      print all parameters
  *   help      list commands

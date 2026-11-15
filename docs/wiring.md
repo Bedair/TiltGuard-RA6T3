@@ -46,7 +46,7 @@ reflects that architecture, not the earlier ad-hoc jumper setup.
 | STBY | D8 | Shifter 2 ch1 | D8 | P006 | GPIO, low = motors off, 1 k LV pull-down |
 | ENC_L | D2 | direct | D3 | P408 | IRQ7, both edges, 5 V-tolerant |
 | ENC_R | D4 | direct | D1 | P411 | IRQ4, both edges, 5 V-tolerant |
-| ECHO | A3 | direct | D0 | P410 | IRQ5, both edges, 5 V-tolerant |
+| BT_RX | D0 (Nano RX net: BLE module TX via Q1) | direct | D0 | P410 | SCI0 RXD0, 9600 8N1, internal pull-up, 5 V-tolerant. Added 2026-11-15; replaces ECHO (ultrasonic not used) |
 | TRIG | D11 | direct | D11 | P109 | GPIO out, 3.3 V |
 | SDA | A4 | direct | SDA (dedicated terminal) | P101 | I3C0 legacy I2C, 5 V-tolerant |
 | SCL | A5 | direct | SCL (dedicated terminal) | P100 | I3C0 legacy I2C, 5 V-tolerant |
@@ -74,6 +74,7 @@ here, not assumed free.
 
 | Pos | Label | Wire |
 |---|---|---|
+| 1 | D0 | <- GERUI D0 (BT_RX: Bluetooth module TX via Q1) - added 2026-11-15; position inferred from 2 = D1, 4 = D3, check the label |
 | 2 | D1 | <- GERUI D4 (ENC_R) |
 | 4 | D3 | <- GERUI D2 (ENC_L) |
 | 6 | D5 | <- Shifter 1 LV1 (PWMA) |

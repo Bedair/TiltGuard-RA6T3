@@ -61,7 +61,8 @@ See `docs/hardware-findings.md` and `docs/wiring.md` for detail.
 | IMU SDA / SCL | SDA / SCL (dedicated terminals) | P101 / P100 | I3C0 legacy I2C, direct (5 V-tolerant) |
 | Left encoder (M2A) | D3 | P408 | IRQ7, direct (5 V-tolerant) |
 | Right encoder (M1A) | D1 | P411 | IRQ4, direct (5 V-tolerant) |
-| Ultrasonic Echo | D0 | P410 | IRQ5, direct (5 V-tolerant) |
+| Bluetooth RX (BLE module TX, robot Nano D0) | D0 | P410 | SCI0 RXD0, 9600, internal pull-up, direct (5 V-tolerant). Was ultrasonic Echo (IRQ5) - ultrasonic disabled (`ULTRASONIC_ENABLED` 0) |
+| (Bluetooth TX, unused) | — (Pmod 2) | P213 | SCI0 TXD0, only because the configurator requires a TX pin; never transmits, not wired |
 | Ultrasonic Trig | D11 | P109 | GPIO out, 3.3 V |
 | Battery sense (VOL) | D4 | P500 | ADC AN016, max 1.1 V |
 | PWMA / PWMB | D5 / D6 | P409 / P113 | GPT1 A / GPT2 A, 20 kHz, via Shifter 1 ch1/ch2 |
@@ -90,6 +91,14 @@ grounding) in `docs/wiring.md`.
   `safety.h`). A refused S1 prints `arm refused: angle=..., limit=+/-40 deg` and blinks LED1 at 10 Hz for 2 s.
   S1 while armed disarms; after a fall (FAULT) one S1 resets and stands it up ~0.5 s later. No motor action at boot.
   The wheels-lifted motor self-test is no longer on S1; `jog <pct>` on the console still runs it.
+- **Drive/turn (`control/drive.c`):** console `drv <v>` / `trn <v>` / `stop` set the stock setpoints
+  (`setting_car_speed` in counts/40 ms into the speed-PI integral, `setting_turn_speed` in 8-bit units added to
+  the turn term), +/-80 max as stock Bluetooth. Each command holds 2 s (deadman), armed only, ignored until the
+  speed-loop soft start is over; targets clear on disarm.
+- **Bluetooth remote (`remote/bt_remote.c`):** ELEGOO BLE app, keys f/b/l/i/s at 9600. The app sends one update
+  per joystick change (no repeats, diagonal = two keys ~1 ms apart), so keys within 5 ms form one update that
+  replaces both targets (speed 40, turn 50); it holds until the next update or 's', 5 s max (lost-link backstop).
+  'f' drives against firmware FWD (`BT_REMOTE_FORWARD_SIGN` -1).
 - **Build ID:** the boot banner prints `build id: <git hash>[-dirty] <date> <time>`. `firmware/makefile.init`
   (included by e² studio's generated makefile) writes the git-ignored `src/build_info_gen.h` on every build.
 - **Black box:** the last 10 s of each armed run (100 Hz, `src/telemetry/blackbox.c`, 18 KB in `.ram_noinit`)

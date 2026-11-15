@@ -135,7 +135,7 @@ FSP Configuration
       P207 21 GPIO LED1 L - "Output mode (Initial Low)" - - "AGT1: AGTIO1; CAC: CACREF; GPT5: GTIOC5A; GPT_OPS: GTIW; SCI9: SCK9; SPI0: MOSI0" - IO - - 
       P208 24 GPIO ARDUINO_RESET - - "Input mode" - - "ADC0(Digital): ADTRG0; GPT_OPS: GTOVLO" - IO - - 
       P212 10 - PMOD2_RXD0 - - Disabled - - "AGT1: AGTEE1; CGC: EXTAL; GPT0: GTIOC0B; GPT_POEGD: GTETRGD; IRQ: IRQ3; SCI0: RXD0" - None - - 
-      P213 9 - PMOD2_TXD0 - - Disabled - - "CGC: XTAL; GPT0: GTIOC0A; GPT_POEGC: GTETRGC; IRQ: IRQ2; SCI0: TXD0" - None - - 
+      P213 9 SCI0_TXD0 PMOD2_TXD0 L None "Peripheral mode" - - "CGC: XTAL; GPT0: GTIOC0A; GPT_POEGC: GTETRGC; IRQ: IRQ2; SCI0: TXD0" - O - - 
       P300 32 JTAG/SWD_SWCLK DEBUG_SWDCLK H - "Peripheral mode" - - "GPT0: GTIOC0A; GPT_OPS: GTOUUP; JTAG/SWD: SWCLK; SPI0: SSLA1" - IO - - 
       P301 31 GPIO PMOD1_CTS9_ARDUINO_D10 - None "Input mode" - - "AGT0: AGTIO0; GPT4: GTIOC4B; GPT_OPS: GTOULO; IRQ: IRQ6; SCI9: CTS_RTS9; SPI0: SSLA0" - IO - - 
       P302 30 - PMOD2_CTS0 - - Disabled - - "GPT4: GTIOC4A; GPT_OPS: GTOUUP; IRQ: IRQ5; SCI0: CTS0; SCI9: SCK9; SPI0: RSPCK0" - None - - 
@@ -148,7 +148,7 @@ FSP Configuration
       P407 16 GPIO PMOD2_RESET - - "Input mode" - - "ADC0(Digital): ADTRG0; AGT0: AGTIO0; GPT: GTADSM0; GPT_OPS: GTIV; I3C/IIC: SDA0; USB FS: USB_VBUS" - IO - - 
       P408 15 GPIO ARDUINO_D3 - IRQ7 "Input mode" - - "AGT1: AGTOB1; GPT1: GTIOC1B; GPT_OPS: GTIW; I3C/IIC: SCL0; IRQ: IRQ7" - IO - - 
       P409 14 GPT1_GTIOC1A ARDUINO_D5 L None "Peripheral mode" - - "AGT1: AGTOA1; GPT1: GTIOC1A; GPT_OPS: GTOWUP; IRQ: IRQ6" - IO - - 
-      P410 13 GPIO PMOD2_MISO_ARDUINO_D0 - IRQ5 "Input mode" - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - IO - - 
+      P410 13 SCI0_RXD0 PMOD2_MISO_ARDUINO_D0 L None "Peripheral mode" - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - I - - 
       P411 12 IRQ_IRQ4 PMOD2_MOSI_ARDUINO_D1 - IRQ4 "IRQ mode" - - "GPT_OPS: GTOVUP; IRQ: IRQ4; SCI0: TXD0" - IO - - 
       P500 49 ADC0_AN016 ARDUINO_D4 - - "Analog mode" - - "ACMPHS0: IVREF0; ADC0: AN016; AGT0: AGTOA0; CAC: CACREF; GPT_OPS: GTIU" - I - - 
       P814 19 - - - - Disabled - - "GPT0: GTIOC0B; GPT_POEGB: GTETRGB; USB FS: USB_DP" - None - - 
@@ -200,7 +200,7 @@ FSP Configuration
       P207 21 - LED1 L - Disabled - - "AGT1: AGTIO1; CAC: CACREF; GPT5: GTIOC5A; GPT_OPS: GTIW; SCI9: SCK9; SPI0: MOSI0" - IO - - 
       P208 24 - ARDUINO_RESET - - Disabled - - "ADC0(Digital): ADTRG0; GPT_OPS: GTOVLO" - IO - - 
       P212 10 - PMOD2_RXD0 - - Disabled - - "AGT1: AGTEE1; CGC: EXTAL; GPT0: GTIOC0B; GPT_POEGD: GTETRGD; IRQ: IRQ3; SCI0: RXD0" - None - - 
-      P213 9 - PMOD2_TXD0 - - Disabled - - "CGC: XTAL; GPT0: GTIOC0A; GPT_POEGC: GTETRGC; IRQ: IRQ2; SCI0: TXD0" - None - - 
+      P213 9 - PMOD2_TXD0 L None Disabled - - "CGC: XTAL; GPT0: GTIOC0A; GPT_POEGC: GTETRGC; IRQ: IRQ2; SCI0: TXD0" - O - - 
       P300 32 JTAG/SWD_SWCLK DEBUG_SWDCLK L - "Peripheral mode" - - "GPT0: GTIOC0A; GPT_OPS: GTOUUP; JTAG/SWD: SWCLK; SPI0: SSLA1" - IO - - 
       P301 31 - PMOD1_CTS9_ARDUINO_D10 - None Disabled - - "AGT0: AGTIO0; GPT4: GTIOC4B; GPT_OPS: GTOULO; IRQ: IRQ6; SCI9: CTS_RTS9; SPI0: SSLA0" - IO - - 
       P302 30 - PMOD2_CTS0 - - Disabled - - "GPT4: GTIOC4A; GPT_OPS: GTOUUP; IRQ: IRQ5; SCI0: CTS0; SCI9: SCK9; SPI0: RSPCK0" - None - - 
@@ -213,7 +213,7 @@ FSP Configuration
       P407 16 - PMOD2_RESET - - Disabled - - "ADC0(Digital): ADTRG0; AGT0: AGTIO0; GPT: GTADSM0; GPT_OPS: GTIV; I3C/IIC: SDA0; USB FS: USB_VBUS" - IO - - 
       P408 15 - ARDUINO_D3 - None Disabled - - "AGT1: AGTOB1; GPT1: GTIOC1B; GPT_OPS: GTIW; I3C/IIC: SCL0; IRQ: IRQ7" - IO - - 
       P409 14 - ARDUINO_D5 L None Disabled - - "AGT1: AGTOA1; GPT1: GTIOC1A; GPT_OPS: GTOWUP; IRQ: IRQ6" - IO - - 
-      P410 13 - PMOD2_MISO_ARDUINO_D0 - None Disabled - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - IO - - 
+      P410 13 - PMOD2_MISO_ARDUINO_D0 L None Disabled - - "GPT_OPS: GTOVLO; IRQ: IRQ5; SCI0: RXD0" - I - - 
       P411 12 - PMOD2_MOSI_ARDUINO_D1 - None Disabled - - "GPT_OPS: GTOVUP; IRQ: IRQ4; SCI0: TXD0" - IO - - 
       P500 49 - ARDUINO_D4 - - Disabled - - "ACMPHS0: IVREF0; ADC0: AN016; AGT0: AGTOA0; CAC: CACREF; GPT_OPS: GTIU" - I - - 
       P814 19 - - - - Disabled - - "GPT0: GTIOC0B; GPT_POEGB: GTETRGB; USB FS: USB_DP" - None - - 
@@ -261,6 +261,14 @@ FSP Configuration
     
   Module "ADC (r_adc)"
     Parameter Checking: Default (BSP)
+    
+  Module "UART (r_sci_uart)"
+    Parameter Checking: Default (BSP)
+    FIFO Support: Disable
+    DTC Support: Disable
+    Flow Control Support: Disable
+    RS-485 Support: Disable
+    IrDA Support: Disabled
     
   HAL
     Instance "g_ioport I/O Port (r_ioport)"
@@ -403,16 +411,6 @@ FSP Configuration
       Filter Source: PCLK filter
       Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
       Callback: encoder_right_isr
-      Pin Interrupt Priority: Priority 2
-      
-    Instance "g_irq_echo External IRQ (r_icu)"
-      Name: g_irq_echo
-      Channel: 5
-      Trigger: Both Edges
-      Digital Filtering: Disabled
-      Filter Source: PCLK filter
-      Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
-      Callback: ultrasonic_echo_isr
       Pin Interrupt Priority: Priority 2
       
     Instance "g_adc_battery ADC (r_adc)"
@@ -593,4 +591,33 @@ FSP Configuration
       Digital Filtering Sample Clock (Only valid when Digital Filtering is Enabled): PCLK / 64
       Callback: button_isr
       Pin Interrupt Priority: Priority 2
+      
+    Instance "g_uart_bt UART (r_sci_uart)"
+      General: Name: g_uart_bt
+      General: Channel: 0
+      General: Data Bits: 8bits
+      General: Parity: None
+      General: Stop Bits: 1bit
+      Baud: Baud Rate: 9600
+      Baud: Baud Rate Modulation: Disabled
+      Baud: Max Error (%): 5
+      Flow Control: CTS/RTS Selection: Hardware RTS
+      Flow Control: Software RTS Port: Disabled
+      Flow Control: Software RTS Pin: Disabled
+      Extra: Clock Source: Internal Clock
+      Extra: Start bit detection: Falling Edge
+      Extra: Noise Filter: Disable
+      Extra: Receive FIFO Trigger Level: Max
+      Extra: IrDA: Enable: Disabled
+      Extra: IrDA: RXD Polarity Switching: Normal
+      Extra: IrDA: TXD Polarity Switching: Normal
+      Extra: RS-485: DE Pin: Disable
+      Extra: RS-485: DE Pin Polarity: Active High
+      Extra: RS-485: DE Port Number: Disabled
+      Extra: RS-485: DE Pin Number: Disabled
+      Interrupts: Callback: bt_uart_callback
+      Interrupts: Receive Interrupt Priority: Priority 4
+      Interrupts: Transmit Data Empty Interrupt Priority: Priority 4
+      Interrupts: Transmit End Interrupt Priority: Priority 4
+      Interrupts: Error Interrupt Priority: Priority 4
       

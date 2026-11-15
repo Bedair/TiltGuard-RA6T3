@@ -10,10 +10,10 @@
  *   every 40 ms (stock: every 8th 5 ms cycle):
  *     car_speed    = (enc_L + enc_R) / 2      signed counts in the window
  *     speed_filter = 0.7 * speed_filter + 0.3 * car_speed
- *     integral    += speed_filter - speed_target           (target = 0)
+ *     integral    += speed_filter - speed_target   (balance_set_targets())
  *     integral     = clamp(integral, -3000, 3000)
  *     speed_out    = -skp * speed_filter - ski * integral
- *     turn_out     = turn_target + tkd * yaw_rate          (target = 0)
+ *     turn_out     = turn_target + tkd * yaw_rate  (balance_set_targets())
  *
  *   pwm_L = clamp(balance_out - speed_out - turn_out, -255, 255)
  *   pwm_R = clamp(balance_out - speed_out + turn_out, -255, 255)
@@ -236,6 +236,8 @@ typedef struct st_balance_status
     float    bal_8bit;            /* Terms in stock 8-bit units, before clamping: */
     float    spd_8bit;            /*   pwm_L = clamp(bal - spd - turn, +/-255) */
     float    turn_8bit;           /*   pwm_R = clamp(bal - spd + turn, +/-255) */
+    float    speed_target;        /* Drive setpoints in effect this step (0 until the soft start is over). */
+    float    turn_target;
     float    speed_integral;      /* Stock units (accumulated counts), clamped to +/-3000. */
     motors_command_t command;     /* The driver command of this step: applied if driving, */
                                   /* only planned in dry-run; all-zero (STOP) when not armed. */
@@ -281,6 +283,15 @@ bool balance_set_dry_run(bool dry_run);
  * boot in dry-run ("dry 0" then enables the motors). */
 #define BALANCE_DRY_RUN_AT_BOOT       (false)
 bool balance_get_dry_run(void);
+
+/*
+ * Drive/turn setpoints (control/drive.c), stock units: speed_target in
+ * encoder counts per 40 ms (stock setting_car_speed: integral += speed_filter
+ * - speed_target), turn_target in 8-bit PWM units (stock setting_turn_speed:
+ * turn_out = turn_target + tkd * yaw_rate). Ignored (treated as 0) until the
+ * speed-loop soft start has finished after an arm. One masked copy.
+ */
+void balance_set_targets(float speed_target, float turn_target);
 
 /* Atomic copy in/out (interrupts masked for the copy only). */
 void balance_get_params(balance_params_t * p_params);

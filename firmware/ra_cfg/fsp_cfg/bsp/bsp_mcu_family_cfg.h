@@ -81,7 +81,7 @@ extern "C" {
             (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 18) /* SPI1 */ | \
             (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 19) /* SPI0 */ | \
             (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 22) /* SCI9 */ | \
-            (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 31) /* SCI0 */ | \
+            (((1 > 0) ? 0U : 1U) << 31) /* SCI0 */ | \
             0x7FB3F7EF) /* Unused */
 #endif
 #ifndef BSP_TZ_CFG_PSARC
@@ -179,7 +179,7 @@ extern "C" {
             (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 2U) /* External IRQ2 */ | \
             (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 3U) /* External IRQ3 */ | \
             (((1 > 0) ? 0U : 1U) << 4U) /* External IRQ4 */ | \
-            (((1 > 0) ? 0U : 1U) << 5U) /* External IRQ5 */ | \
+            (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 5U) /* External IRQ5 */ | \
             (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 6U) /* External IRQ6 */ | \
             (((1 > 0) ? 0U : 1U) << 7U) /* External IRQ7 */ | \
             (((RA_NOT_DEFINED > 0) ? 0U : 1U) << 8U) /* External IRQ8 */ | \

@@ -44,7 +44,7 @@ int telemetry_data_printf(const char * p_format, ...);
  * mode a row is either sent whole or dropped whole, never split. Not
  * reentrant per line object; main loop only.
  */
-#define TELEMETRY_LINE_MAX (160U)
+#define TELEMETRY_LINE_MAX (192U) /* Armed line worst case ~170 with the drv/trn fields. Buffers are static, never on the stack. */
 
 typedef struct st_telemetry_line
 {

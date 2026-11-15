@@ -19,16 +19,6 @@ extern const external_irq_cfg_t g_irq_button_cfg;
 void button_isr(external_irq_callback_args_t *p_args);
 #endif
 /** External IRQ on ICU Instance. */
-extern const external_irq_instance_t g_irq_echo;
-
-/** Access the ICU instance using these structures when calling API functions directly (::p_api is not used). */
-extern icu_instance_ctrl_t g_irq_echo_ctrl;
-extern const external_irq_cfg_t g_irq_echo_cfg;
-
-#ifndef ultrasonic_echo_isr
-void ultrasonic_echo_isr(external_irq_callback_args_t *p_args);
-#endif
-/** External IRQ on ICU Instance. */
 extern const external_irq_instance_t g_irq_encoder_right;
 
 /** Access the ICU instance using these structures when calling API functions directly (::p_api is not used). */

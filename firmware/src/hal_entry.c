@@ -17,6 +17,8 @@
 #include "actuators/motors.h"
 #include "control/balance.h"
 #include "control/jog.h"
+#include "control/drive.h"
+#include "remote/bt_remote.h"
 #include "telemetry/console.h"
 #include "safety/fault.h"
 #include "telemetry/blackbox.h"
@@ -493,6 +495,10 @@ static HAL_NOINLINE void report_armed_line (void)
     telemetry_line_str(p, balance_motion_name(s_bal.motion_left));
     telemetry_line_str(p, " R=");
     telemetry_line_str(p, balance_motion_name(s_bal.motion_right));
+    telemetry_line_str(p, " | drv=");
+    telemetry_line_fixed_signed(p, s_bal.speed_target, 0U);
+    telemetry_line_str(p, " trn=");
+    telemetry_line_fixed_signed(p, s_bal.turn_target, 0U);
     telemetry_line_str(p, " | ");
     telemetry_line_str(p, armed_mode_name(&s_bal));
 
@@ -643,6 +649,9 @@ static HAL_NOINLINE void report_sensors_encoders (void)
 
 static HAL_NOINLINE void report_sensors_distance (void)
 {
+#if !ULTRASONIC_ENABLED
+    telemetry_printf("ultrasonic=off ");
+#else
     ultrasonic_snapshot_t ultrasonic;
     ultrasonic_get_snapshot(&ultrasonic);
 
@@ -658,6 +667,7 @@ static HAL_NOINLINE void report_sensors_distance (void)
     }
 
     telemetry_printf("echo_timeouts=%u ", (unsigned) ultrasonic.timeout_count);
+#endif
 }
 
 static HAL_NOINLINE void report_sensors_battery_safety (safety_state_t safety_state)
@@ -823,6 +833,9 @@ void hal_entry (void)
         fault_halt(&leds, "button", err);
     }
 
+    /* Not a safety function: on error it prints why and stays off (no halt). */
+    (void) bt_remote_init();
+
     /* What survived the reset - before anything can start a new recording. */
     blackbox_init();
 
@@ -904,6 +917,7 @@ void hal_entry (void)
         }
 
         jog_update(tick, safety_state); /* Both builds: a jog must always time out. */
+        drive_update(tick, safety_state); /* drv/trn deadman; clears both targets when not armed. */
 
 #ifndef MOTOR_BENCH_TEST
         handle_pending_arm(angle.filtered_angle_deg);
@@ -1000,6 +1014,7 @@ void hal_entry (void)
         }
 
         console_poll();
+        bt_remote_poll();
         blackbox_dump_poll();
 
         /* Armed (balance law running, live or dry-run): the combined line

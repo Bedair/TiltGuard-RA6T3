@@ -27,33 +27,6 @@ const external_irq_cfg_t g_irq_button_cfg =
 /* Instance structure to use this module. */
 const external_irq_instance_t g_irq_button =
 { .p_ctrl = &g_irq_button_ctrl, .p_cfg = &g_irq_button_cfg, .p_api = &g_external_irq_on_icu };
-icu_instance_ctrl_t g_irq_echo_ctrl;
-
-/** External IRQ extended configuration for ICU HAL driver */
-const icu_extended_cfg_t g_irq_echo_ext_cfg =
-{ .filter_src = EXTERNAL_IRQ_DIGITAL_FILTER_PCLK_DIV, };
-
-const external_irq_cfg_t g_irq_echo_cfg =
-{ .channel = 5, .trigger = EXTERNAL_IRQ_TRIG_BOTH_EDGE, .filter_enable = false, .clock_source_div =
-          EXTERNAL_IRQ_CLOCK_SOURCE_DIV_64,
-  .p_callback = ultrasonic_echo_isr,
-  /** If NULL then do not add & */
-#if defined(NULL)
-    .p_context           = NULL,
-#else
-  .p_context = (void*) &NULL,
-#endif
-  .p_extend = (void*) &g_irq_echo_ext_cfg,
-  .ipl = (2),
-#if defined(VECTOR_NUMBER_ICU_IRQ5)
-    .irq                 = VECTOR_NUMBER_ICU_IRQ5,
-#else
-  .irq = FSP_INVALID_VECTOR,
-#endif
-        };
-/* Instance structure to use this module. */
-const external_irq_instance_t g_irq_echo =
-{ .p_ctrl = &g_irq_echo_ctrl, .p_cfg = &g_irq_echo_cfg, .p_api = &g_external_irq_on_icu };
 icu_instance_ctrl_t g_irq_encoder_right_ctrl;
 
 /** External IRQ extended configuration for ICU HAL driver */
