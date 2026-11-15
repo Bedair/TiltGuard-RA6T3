@@ -11,6 +11,7 @@
 #include "../control/balance.h"
 #include "../control/jog.h"
 #include "../safety/safety.h"
+#include "blackbox.h"
 
 #define CONSOLE_LINE_MAX       (48U)
 #define CONSOLE_READ_CHUNK     (16U)
@@ -222,7 +223,7 @@ void console_print_speed_loop (void)
 static void console_print_help (void)
 {
     telemetry_printf("commands: kp <v> | kd <v> | sp <deg> | skp <v> | ski <v> | tkd <v> | "
-                     "dry <0|1> | jog <1..%d> | show | help  (space optional: 'skp0')\r\n", JOG_MAX_PERCENT);
+                     "dry <0|1> | jog <1..%d> | dump | show | help  (space optional: 'skp0')\r\n", JOG_MAX_PERCENT);
 }
 
 static __attribute__((noinline)) void console_reject_range (console_param_def_t const * p_def)
@@ -243,6 +244,7 @@ typedef enum e_console_reply
     CONSOLE_REPLY_HELP,
     CONSOLE_REPLY_MODE,
     CONSOLE_REPLY_JOG,
+    CONSOLE_REPLY_DUMP,
 } console_reply_t;
 
 static void console_apply (console_param_def_t const * p_def, float value)
@@ -372,6 +374,11 @@ static __attribute__((noinline)) console_reply_t console_execute (char * p_line)
         return CONSOLE_REPLY_HELP;
     }
 
+    if ((NULL == p_value) && console_name_is(p_line, name_length, "dump"))
+    {
+        return CONSOLE_REPLY_DUMP;
+    }
+
     if (console_name_is(p_line, name_length, "dry"))
     {
         return console_execute_dry(p_value);
@@ -450,6 +457,12 @@ static __attribute__((noinline)) void console_reply (console_reply_t reply)
         case CONSOLE_REPLY_JOG:
         {
             jog_start(s_pending_jog_percent);
+            break;
+        }
+
+        case CONSOLE_REPLY_DUMP:
+        {
+            blackbox_dump_start(); /* Checks the state and the CRC, and prints. */
             break;
         }
 

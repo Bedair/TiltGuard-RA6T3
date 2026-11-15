@@ -175,6 +175,11 @@ unsigned telemetry_read (char * p_buffer, unsigned size)
     return SEGGER_RTT_Read(0U, p_buffer, size);
 }
 
+unsigned telemetry_write_space (unsigned channel)
+{
+    return SEGGER_RTT_GetAvailWriteSpace(channel);
+}
+
 int telemetry_data_printf (const char * p_format, ...)
 {
     va_list param_list;

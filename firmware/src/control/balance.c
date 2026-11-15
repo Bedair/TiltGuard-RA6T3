@@ -11,6 +11,7 @@
 #include "../actuators/motors.h"
 #include "../safety/safety.h"
 #include "../sensors/encoders.h"
+#include "../telemetry/blackbox.h"
 
 #define BALANCE_PERMILLE_PER_8BIT ((float) MOTORS_COMMAND_MAX / BALANCE_PWM_LIMIT_8BIT) /* 1000 / 255. */
 
@@ -39,7 +40,9 @@ static float    s_pwm_left;          /* Previous step's clamped 8-bit command - 
 static float    s_pwm_right;
 static uint32_t s_step_count;
 static bool     s_was_armed;
-static uint32_t s_armed_steps;     /* Steps since the most recent arm (speed-loop soft start). */
+static uint32_t s_armed_steps;     /* Steps since the most recent arm (speed-loop soft start), saturating. */
+static uint32_t s_armed_total;     /* Steps since the most recent arm, for the black-box time stamp. */
+static blackbox_record_t s_record; /* Static, like s_command: not on the stack the ISR runs on. */
 static motors_command_t s_command; /* This step's driver command. Static, not on the (main) stack the ISR runs on. */
 static balance_check_t s_check;
 
@@ -75,6 +78,48 @@ static float balance_clamp (float value, float limit)
     }
 
     return value;
+}
+
+/* Rounded and saturated to int16, for the black-box record. */
+static int16_t balance_to_i16 (float value)
+{
+    if (value >= 32767.0f)
+    {
+        return INT16_MAX;
+    }
+
+    if (value <= -32768.0f)
+    {
+        return INT16_MIN;
+    }
+
+    return (int16_t) lroundf(value);
+}
+
+static int16_t balance_signed_duty (bool reverse, uint32_t duty_counts)
+{
+    int16_t const duty = (int16_t) motors_duty_permille(duty_counts);
+
+    return reverse ? (int16_t) -duty : duty;
+}
+
+/* Black box: one record of this step (see blackbox.h for the fields). */
+static void balance_record_step (float angle_deg, float gyro_x_dps, float balance_out, float speed_applied,
+                                 motors_command_t const * p_command)
+{
+    blackbox_record_t * const p_rec = &s_record;
+
+    p_rec->t_10ms    = (uint16_t) (s_armed_total / BLACKBOX_PERIOD_STEPS);
+    p_rec->ang_x100  = balance_to_i16(angle_deg * 100.0f);
+    p_rec->gyro_x10  = balance_to_i16(gyro_x_dps * 10.0f);
+    p_rec->pwm_left  = balance_signed_duty(p_command->left_reverse, p_command->left_duty_counts);
+    p_rec->pwm_right = balance_signed_duty(p_command->right_reverse, p_command->right_duty_counts);
+    p_rec->bal       = balance_to_i16(balance_out);
+    p_rec->spd       = balance_to_i16(speed_applied);
+    p_rec->enc_left  = (int16_t) s_enc_left_position;  /* Wraps (modulo) past +/-32768, by design. */
+    p_rec->enc_right = (int16_t) s_enc_right_position;
+
+    blackbox_record(p_rec);
 }
 
 static int16_t balance_to_permille (float pwm_8bit)
@@ -353,9 +398,30 @@ void balance_step (float angle_deg, float gyro_x_dps, float gyro_z_dps)
     {
         if (!s_was_armed)
         {
-            /* First step of a new run: the logic check starts from zero. */
+            /* First step of a new run. The controller state (speed filter,
+             * integral and output, turn term, 40 ms window phase, encoder
+             * windows and position, previous PWM) is already at reset:
+             * balance_reset_state() runs on every step while not armed. The
+             * D term has no history (kd * gyro of this step). So every arm -
+             * including a stand-up from rest - starts clean. The logic
+             * check and the black box start from zero too. */
             s_was_armed   = true;
             s_armed_steps = 0U;
+            s_armed_total = 0U;
+
+            blackbox_run_info_t const info =
+            {
+                .kp            = p.kp,
+                .kd            = p.kd,
+                .setpoint_deg  = p.setpoint_deg,
+                .speed_kp      = p.speed_kp,
+                .speed_ki      = p.speed_ki,
+                .turn_kd       = p.turn_kd,
+                .arm_angle_deg = angle_deg,
+                .dry_run       = dry_run,
+                .speed_loop_on = speed_loop_on,
+            };
+            blackbox_start(&info);
             (void) memset(&s_check, 0, sizeof(s_check));
             (void) memset(&s_motion_left.count, 0, sizeof(s_motion_left.count));
             (void) memset(&s_motion_right.count, 0, sizeof(s_motion_right.count));
@@ -445,6 +511,13 @@ void balance_step (float angle_deg, float gyro_x_dps, float gyro_z_dps)
         {
             driving = motors_apply(p_command);
         }
+
+        if (0U == (s_armed_total % BLACKBOX_PERIOD_STEPS))
+        {
+            balance_record_step(angle_deg, gyro_x_dps, balance_out, speed_applied, p_command);
+        }
+
+        s_armed_total++;
 
         balance_motion_accumulate(&s_motion_left, driving, p_command->left_duty_counts);
         balance_motion_accumulate(&s_motion_right, driving, p_command->right_duty_counts);

@@ -83,10 +83,18 @@ grounding) in `docs/wiring.md`.
   direction of (angle − setpoint) as `sign_err` (steps where the D/turn terms are ≥ half the P term are not
   checked; there an opposite direction is correct). Dry-run (`dry 1`; off at boot, `BALANCE_DRY_RUN_AT_BOOT`)
   runs and logs the full law with the motors held off. See `tools/telemetry/README.md`.
-- **S1 (as stock):** set the robot on the floor (resting on its stand is fine) and press S1 in READY: it arms
-  within +/-22 deg of the setpoint, the angle term kicks it upright, and it balances (speed loop soft-starts after
-  0.5 s). S1 while armed disarms; after a fall (FAULT) one S1 resets and stands it up ~0.5 s later. The wheels-lifted motor self-test
-  is no longer on S1; `jog <pct>` on the console still runs it.
+- **S1 (as stock):** set the robot on the floor (resting on its support is fine) and press S1 in READY: it arms
+  from any |angle| <= 40 deg (`BALANCE_ARM_LIMIT_DEG`), the angle term kicks it upright, and it balances (speed loop
+  soft-starts after 0.5 s). For the first 2 s after arming the tilt cut-out is +/-45 deg (stock START mode skips its
+  +/-22 deg cut-out for 2 s), then +/-25 deg; the tilt check runs only while ACTIVE (`SAFETY_STANDUP_*` in
+  `safety.h`). A refused S1 prints `arm refused: angle=..., limit=+/-40 deg` and blinks LED1 at 10 Hz for 2 s.
+  S1 while armed disarms; after a fall (FAULT) one S1 resets and stands it up ~0.5 s later. No motor action at boot.
+  The wheels-lifted motor self-test is no longer on S1; `jog <pct>` on the console still runs it.
+- **Build ID:** the boot banner prints `build id: <git hash>[-dirty] <date> <time>`. `firmware/makefile.init`
+  (included by e² studio's generated makefile) writes the git-ignored `src/build_info_gen.h` on every build.
+- **Black box:** the last 10 s of each armed run (100 Hz, `src/telemetry/blackbox.c`, 18 KB in `.ram_noinit`)
+  survive a reset; `dump` on the console or `tools/telemetry/dump.py` reads and plots it. Lost on power loss
+  and possibly on reflashing.
 - Every armed 40 ms window says whether each wheel turned (`mot L=ok`/`NONE`/...); ~0.5 s driven at >= 30%
   with no encoder edges latches FAULT `0x4` (`SAFETY_FAULT_ENCODER`).
 

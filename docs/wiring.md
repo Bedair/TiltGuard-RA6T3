@@ -55,6 +55,73 @@ reflects that architecture, not the earlier ad-hoc jumper setup.
 
 **Not used:** Pmod 2, J6 (A0-A5), FPB A4/A5.
 
+## ElectroCookie shield, by connector (as built, reported 2026-11-15)
+
+Orientation: shield USB connector at the top; connectors numbered 1 (top) to
+4 (bottom); terminal positions 1-10 left to right, the label printed below each
+terminal. Only the positions listed were reported; the others are left blank
+here, not assumed free.
+
+**Conn 1 (top)**
+
+| Pos | Label | Wire |
+|---|---|---|
+| 8 | 5V | <- GERUI 5V |
+| 9 | 5V | <- GERUI 5V |
+| 10 | GND | <- GERUI GND |
+
+**Conn 2**
+
+| Pos | Label | Wire |
+|---|---|---|
+| 2 | D1 | <- GERUI D4 (ENC_R) |
+| 4 | D3 | <- GERUI D2 (ENC_L) |
+| 6 | D5 | <- Shifter 1 LV1 (PWMA) |
+| 7 | D6 | <- Shifter 1 LV2 (PWMB) |
+| 8 | 5V | <- Shifter 1 HV (supply) |
+| 9 | 5V | <- Shifter 2 HV (supply) |
+| 10 | GND | <- Shifter 2 GND |
+
+**Conn 3**
+
+| Pos | Label | Wire |
+|---|---|---|
+| 1 | D7 | <- Shifter 1 LV3 (AIN1) |
+| 2 | D8 | <- Shifter 2 LV1 (STBY) |
+| 6 | D12 | <- Shifter 1 LV4 (BIN1) |
+| 10 | GND | <- Shifter 1 GND |
+
+**Conn 4 (bottom)**
+
+| Pos | Label | Wire |
+|---|---|---|
+| 1 | SCL | <- GERUI A5 |
+| 2 | SDA | <- GERUI A4 |
+| 6 | VIN | **NEVER CONNECT** |
+| 7 | GND | <- GERUI GND |
+| 8 | 3V3 | <- Shifter 1 LV (supply) |
+| 9 | 3V3 | <- Shifter 2 LV (supply) |
+| 10 | GND | <- GERUI GND |
+
+A0-A5 are unused. The FPB's A4/A5 are **not** SDA/SCL: SDA/SCL are the dedicated
+terminals on Conn 4.
+
+**Shifter HV side -> GERUI:** Shifter 1 HV1-HV4 -> D5, D6, D7, D12 (PWMA, PWMB,
+AIN1, BIN1); Shifter 2 HV1 -> D8 (STBY).
+
+**Open points from this list, to check on the robot:**
+1. **5 V:** Conn 1 positions 8/9 tie GERUI 5V (the buck converter's output) to the
+   shield's 5V, which is the FPB's own 5 V net. "Power" below says the FPB is
+   USB-powered and kept separate, with the 1N5819 diode-OR still to do. If no diode
+   is in this path, the buck output and USB 5 V are wired in parallel whenever USB
+   is plugged in. Confirm whether the diode is fitted, then update "Power".
+   (It also explains how the FPB ran untethered on 2026-11-15.)
+2. **Battery sense (VOL):** the pin map has GERUI A2 -> FPB D4, but no D4 terminal
+   appears in the list. If it's really unwired, that would explain the floating
+   0.6-0.9 V `v_bat_raw` readings.
+3. **Ultrasonic:** ECHO (GERUI A3 -> FPB D0) and TRIG (GERUI D11 -> FPB D11) aren't
+   in the list either. If they're unwired, that would explain `dist_cm=no_echo`.
+
 ## Power
 
 Two separate power domains right now:

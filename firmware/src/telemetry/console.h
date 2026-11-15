@@ -10,8 +10,9 @@
  *   skp <v>   speed P            (0 .. 50)
  *   ski <v>   speed I            (0 .. 5)
  *   tkd <v>   turn (yaw) D       (0 .. 10)
- *   dry <0|1> dry-run off/on (default on); refused while armed
+ *   dry <0|1> dry-run off/on (default off, BALANCE_DRY_RUN_AT_BOOT); refused while armed
  *   jog <pct> both wheels at +pct (1 .. 20) for 1 s; READY only, works in dry-run
+ *   dump      black-box recording as CSV on channel 1 (telemetry/blackbox.h); not while armed
  *   show      print all parameters
  *   help      list commands
  *

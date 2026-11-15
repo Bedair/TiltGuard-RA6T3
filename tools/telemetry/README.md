@@ -81,11 +81,43 @@ together.
 
 ## Button only (no console needed)
 
-As on the stock ELEGOO robot: set it on the floor (resting on its stand is
-fine, anything within +/-22 deg) and press S1 in READY - it stands up and
-balances. S1 while armed disarms; after a fall (FAULT) one S1 resets and
-stands it up about 0.5 s later. The speed loop is held off for 0.5 s after each arm and
-fades in over 1 s, so the stand-up kick does not wind it up.
+As on the stock ELEGOO robot: set it on the floor (resting on its support is
+fine) and press S1 in READY - it stands up and balances. Nothing moves at
+power-on; S1 is always the explicit start.
+
+- S1 arms from any |angle| up to 40 deg. For the first 2 s after arming the
+  tilt cut-out is +/-45 deg (stock skips its cut-out entirely for 2 s), then
+  +/-25 deg. The tilt check only runs while armed, so a robot resting tilted
+  stays READY.
+- S1 refused (angle beyond 40 deg): `arm refused: angle=<x>, limit=+/-40 deg`
+  on RTT, and **LED1 blinks fast (10 Hz) for 2 s** instead of its 1 Hz heartbeat.
+- Every READY entry prints `READY: angle=<x> deg`: the angle S1 would start from.
+- S1 while armed disarms; after a fall (FAULT) one S1 resets and stands it up
+  about 0.5 s later.
+- The speed loop is held off for 0.5 s after each arm and fades in over 1 s,
+  so the stand-up kick does not wind it up. All controller state is reset at arm.
+
+## Black box (untethered runs)
+
+The last 10 s of every armed run are recorded at 100 Hz in RAM that survives
+a reset (S2) and a debugger attach, but **not a power loss**. The recording is
+frozen when the run ends (S1, tilt cut-off, other fault, or a reset while armed),
+with the reason. The next arm overwrites it.
+
+After a run without the laptop:
+1. Keep the board powered (don't unplug its supply), plug in the laptop's USB.
+2. Don't start an e2 studio debug session: it reflashes, and the J-Link flash
+   loader can overwrite the RAM. Close RTT Viewer's own session too if dump.py
+   can't connect.
+3. `python dump.py` (in this folder). It sends `dump`, saves
+   `blackbox_<date>_<time>.csv` and plots angle, pwm L/R, encoder position and
+   the bal/spd terms against time. `--save out.png` writes the plot instead of
+   showing it; `--plot-only file.csv` re-plots a saved dump.
+
+At boot the firmware prints `blackbox: kept from before the reset - reason=...`
+or `blackbox: empty`. Typing `dump` in RTT Viewer does the same as the script
+(CSV on channel 1). The file starts with `# blackbox build=...`, `# run reason=...`
+and `# params ...` lines; columns are documented in `dump.py`.
 
 ## Console (RTT Viewer, channel 0)
 
@@ -107,6 +139,7 @@ is echoed back.
 | `tkd <v>` | turn (yaw-rate) D | 0.5 | 0..10 |
 | `dry <0\|1>` | dry-run off/on: armed, the law runs and logs, motors stay off | 0 (off; `BALANCE_DRY_RUN_AT_BOOT`) | refused while armed |
 | `jog <pct>` | both wheels at +pct duty for 1 s, then stop; prints per-wheel encoder edges with a `moved` / `DID NOT MOVE` verdict and a pin/timer readback. Direction still needs an eye: they must roll FORWARD | | 1..20, READY only (works in dry-run) |
+| `dump` | print the black-box recording as CSV on channel 1 (see above) | | not while armed |
 | `show` | print all parameters | | |
 | `help` | list commands | | |
 

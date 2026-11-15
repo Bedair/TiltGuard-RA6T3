@@ -74,4 +74,8 @@ bool telemetry_line_send(telemetry_line_t * p_line, unsigned channel);
  * Viewer). Returns the number of bytes copied (0 if nothing is pending). */
 unsigned telemetry_read(char * p_buffer, unsigned size);
 
+/* Free bytes in RTT up-channel `channel` right now - for writers that must
+ * wait for room instead of dropping a line (the black-box dump). */
+unsigned telemetry_write_space(unsigned channel);
+
 #endif /* TELEMETRY_H_ */

@@ -19,6 +19,7 @@ static uint32_t s_last_tick_overrun_count;
 static uint32_t s_last_motor_error_count;
 static uint32_t s_last_stall_fault_count;
 static uint32_t s_calibration_ticks_remaining;
+static uint32_t s_active_ticks; /* Ticks since entering ACTIVE, saturating at SAFETY_STANDUP_TICKS. */
 
 /* The counters passed to safety_update() are monotonic totals since boot,
  * not since the last reset. After init/reset, the first update only records
@@ -41,6 +42,7 @@ void safety_init (void)
     s_last_motor_error_count      = 0U;
     s_last_stall_fault_count      = 0U;
     s_calibration_ticks_remaining = SAFETY_CALIBRATION_TICKS;
+    s_active_ticks                = 0U;
     s_baseline_pending            = true;
 }
 
@@ -67,6 +69,11 @@ void safety_reset (void)
 safety_state_t safety_get_state (void)
 {
     return s_state;
+}
+
+bool safety_in_standup (void)
+{
+    return (SAFETY_STATE_ACTIVE == s_state) && (s_active_ticks < SAFETY_STANDUP_TICKS);
 }
 
 uint32_t safety_get_fault_reasons (void)
@@ -127,9 +134,21 @@ void safety_update (float    tilt_angle_deg,
 
     uint32_t new_faults = 0U;
 
-    if (fabsf(tilt_angle_deg) > SAFETY_TILT_LIMIT_DEG)
+    if (SAFETY_STATE_ACTIVE == s_state)
     {
-        new_faults |= SAFETY_FAULT_TILT;
+        /* See SAFETY_STANDUP_* in safety.h: wider limit for the first 2 s. */
+        float const tilt_limit_deg = (s_active_ticks < SAFETY_STANDUP_TICKS) ? SAFETY_STANDUP_TILT_LIMIT_DEG
+                                                                             : SAFETY_TILT_LIMIT_DEG;
+
+        if (s_active_ticks < SAFETY_STANDUP_TICKS)
+        {
+            s_active_ticks++;
+        }
+
+        if (fabsf(tilt_angle_deg) > tilt_limit_deg)
+        {
+            new_faults |= SAFETY_FAULT_TILT;
+        }
     }
 
     if (imu_failed_this_tick || (s_ticks_since_imu_update > SAFETY_IMU_STALE_TICKS))
@@ -192,7 +211,9 @@ void safety_update (float    tilt_angle_deg,
         {
             if (s_active_requested)
             {
-                s_state = SAFETY_STATE_ACTIVE;
+                s_active_requested = false;
+                s_active_ticks     = 0U; /* Stand-up window starts now. */
+                s_state            = SAFETY_STATE_ACTIVE;
             }
 
             break;

@@ -9,7 +9,8 @@
  * to INIT, not directly to READY or ACTIVE - CALIBRATING's settle window
  * runs again before READY. See hal_entry.c for the button-to-state wiring.
  *
- * FAULT is latched: once entered (tilt beyond +/-25 deg, an IMU read
+ * FAULT is latched: once entered (tilt beyond the limit while ACTIVE - see
+ * below -, an IMU read
  * failure or >5 ms without a fresh sample, a 1 kHz tick overrun, or a
  * motor-driver FSP error, or a driven wheel that doesn't turn),
  * motors_disable() is called exactly once and the state stays FAULT -
@@ -45,7 +46,24 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define SAFETY_TILT_LIMIT_DEG    (25.0f) /* Stock cuts at +/-22; 35 was too late to recover and made falls more violent. */
+/*
+ * Tilt cut-out, checked only while ACTIVE (motors armed). In INIT/READY the
+ * motors are off, so a tilted robot - e.g. resting on its support at about
+ * -20 deg - is not a fault; it must stay READY so S1 can stand it up.
+ *
+ * Stand-up window, as stock: the ELEGOO firmware starts in motion_mode START,
+ * which skips its +/-22 deg cut-out for 2 s ("motion_mode != START &&
+ * motion_mode != STOP && (angle < -22 || 22 < angle)"), so from rest the
+ * saturated angle term drives the wheels and the robot pops up. Here the
+ * first SAFETY_STANDUP_TICKS after arming use SAFETY_STANDUP_TILT_LIMIT_DEG
+ * instead of SAFETY_TILT_LIMIT_DEG. Stock has no limit at all during START;
+ * 45 deg is kept as a bound so S1 can't run the motors at full duty for 2 s
+ * on a robot that is lying flat, on its back or held upside down.
+ * After the window it is SAFETY_TILT_LIMIT_DEG, as before.
+ */
+#define SAFETY_TILT_LIMIT_DEG          (25.0f) /* Stock cuts at +/-22. 25 is what balanced on 2026-11-15; 35 was too late to recover. */
+#define SAFETY_STANDUP_TILT_LIMIT_DEG  (45.0f)
+#define SAFETY_STANDUP_TICKS           (2000U) /* 2 s, stock START. */
 #define SAFETY_IMU_STALE_TICKS   (5U)   /* >5 ms without a fresh IMU sample. */
 #define SAFETY_CALIBRATION_TICKS (500U) /* 0.5 s settle window after init. */
 
@@ -97,6 +115,9 @@ void safety_disarm(void);
 void safety_reset(void);
 
 safety_state_t safety_get_state(void);
+
+/* True during the first SAFETY_STANDUP_TICKS of ACTIVE (stand-up window). */
+bool safety_in_standup(void);
 uint32_t safety_get_fault_reasons(void);
 uint32_t safety_get_warnings(void);
 

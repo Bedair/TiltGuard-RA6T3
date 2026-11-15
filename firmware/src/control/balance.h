@@ -44,8 +44,12 @@
  *     not ported.
  *   - Speed PI: stock gains, but its integral is frozen while both wheels
  *     are saturated in the direction it would push (anti-windup), and it
- *     soft-starts after each arm (BALANCE_SPEED_START_*). Arming window
- *     5 deg (stock has none).
+ *     soft-starts after each arm (BALANCE_SPEED_START_*).
+ *   - Start: stock runs the law from power-on in motion_mode START, with
+ *     its +/-22 deg cut-out skipped for 2 s, so it stands up from rest. Here
+ *     S1 starts it instead (no motor action at boot), from any |angle| up to
+ *     BALANCE_ARM_LIMIT_DEG, and safety.c skips the normal cut-out for the
+ *     same 2 s (SAFETY_STANDUP_*), with a 45 deg bound stock doesn't have.
  *   - Speed loop off (BALANCE_SPEED_LOOP_OFF, skp = ski = 0): the speed
  *     filter and integrator are held at 0, so the PD alone drives.
  *   - Dry-run mode (balance_set_dry_run()): armed, law running, output not
@@ -76,7 +80,7 @@
  * the robot was being held by hand, so it measured the hand, not the robot.
  * Re-measure only from a hands-off run: the mean of sp + spd/kp while the
  * wheels are near standstill. Live with the "sp" console command; the arming
- * check (|angle - setpoint| < BALANCE_ARM_WINDOW_DEG) uses the live value.
+ * limit (|angle| <= BALANCE_ARM_LIMIT_DEG) doesn't depend on it.
  */
 #define BALANCE_SETPOINT_DEG_DEFAULT  (0.0f)
 
@@ -132,13 +136,15 @@
 #define BALANCE_SPEED_START_DELAY_STEPS (500U)  /* 0.5 s at 1 kHz. */
 #define BALANCE_SPEED_START_RAMP_STEPS  (1000U) /* Then 1.0 s ramp to full. */
 
-/* Arming window: S1 arms only if |angle - setpoint| is below this. 22 deg =
- * the stock motor cut-out, so - as on the stock robot - it arms from its
- * resting angle (about -19 deg on the floor): the angle term saturates, the
- * wheels kick, and it stands up; the speed loop stays off for the first
- * 0.5 s (soft start) so the kick doesn't wind it up. Must stay below
- * SAFETY_TILT_LIMIT_DEG (25), or arming would fault at once. */
-#define BALANCE_ARM_WINDOW_DEG        (22.0f)
+/* Arming limit: S1 arms only if |angle| is at most this (absolute angle, like
+ * stock's limits and the safety cut-out). Covers the robot resting on its
+ * support (-18.6 / -21.1 deg in the 2026-11-14 boot logs) with margin: the
+ * angle term saturates, the wheels kick and it stands up, inside safety.c's
+ * 2 s stand-up window (SAFETY_STANDUP_*). Must stay below
+ * SAFETY_STANDUP_TILT_LIMIT_DEG (45), or arming would fault at once. The
+ * old 22 deg window sat right at the resting angle, and the 25 deg tilt
+ * fault applied even in READY - see docs/status.md, 2026-11-15. */
+#define BALANCE_ARM_LIMIT_DEG         (40.0f)
 
 /*
  * Built-in logic check (runs every step while armed, speed loop off only).

@@ -19,11 +19,15 @@
 #include "control/jog.h"
 #include "telemetry/console.h"
 #include "safety/fault.h"
+#include "telemetry/blackbox.h"
+#include "build_info.h"
 
 extern bsp_leds_t g_bsp_leds;
 
 /* 1 kHz tick thresholds. */
 #define LED_BLINK_TICKS     (500U)  /* 1 Hz LED1 heartbeat, and LED2's ACTIVE blink rate. */
+#define LED_FAST_BLINK_TICKS (50U)  /* LED1 at 10 Hz: S1 arm refused (angle beyond the limit)... */
+#define LED_REFUSED_TICKS   (2000U) /* ...for 2 s. */
 #define CSV_REPORT_TICKS    (10U)   /* 100 Hz CSV on RTT channel 1, while armed. */
 #define SENSOR_REPORT_TICKS (100U)  /* 10 Hz: the armed line, or encoder/ultrasonic/battery/safety when not armed. */
 #define IMU_REPORT_TICKS    (500U)  /* 2 Hz IMU telemetry - kept slower so the output stays readable. */
@@ -201,15 +205,14 @@ static HAL_NOINLINE void report_arm (float angle_deg)
     print_armed_legend();
 }
 
-/* Returns true if it requested ACTIVE; prints the refusal otherwise. */
+/* LED1 fast blink until this tick (S1 arm refused), so it's visible without the laptop. */
+static uint32_t s_led1_fast_until_tick;
+
+/* Returns true if it requested ACTIVE; prints the refusal and starts the
+ * LED1 fast blink otherwise. */
 static HAL_NOINLINE bool try_arm (float angle_deg)
 {
-    balance_params_t params;
-    balance_get_params(&params);
-
-    float const arm_error_deg = angle_deg - params.setpoint_deg;
-
-    if (fabsf(arm_error_deg) < BALANCE_ARM_WINDOW_DEG)
+    if (fabsf(angle_deg) <= BALANCE_ARM_LIMIT_DEG)
     {
         safety_request_active();
 
@@ -217,20 +220,56 @@ static HAL_NOINLINE bool try_arm (float angle_deg)
     }
 
     decimal2_t angle_dec;
-    decimal2_t setpoint_dec;
-    decimal2_t error_dec;
     split_decimal2(angle_deg, &angle_dec);
-    split_decimal2(params.setpoint_deg, &setpoint_dec);
-    split_decimal2(arm_error_deg, &error_dec);
 
-    telemetry_printf("arm refused: angle=%s%d.%02u setpoint=%s%d.%02u error=%s%d.%02u deg, "
-                     "must be within +/-%d deg - hold it upright and press S1 again\r\n",
-                     angle_dec.p_sign, angle_dec.int_part, angle_dec.frac_part,
-                     setpoint_dec.p_sign, setpoint_dec.int_part, setpoint_dec.frac_part,
-                     error_dec.p_sign, error_dec.int_part, error_dec.frac_part,
-                     (int) BALANCE_ARM_WINDOW_DEG);
+    telemetry_printf("arm refused: angle=%s%d.%02u, limit=+/-%d deg (LED1 blinks fast for 2 s)\r\n",
+                     angle_dec.p_sign, angle_dec.int_part, angle_dec.frac_part, (int) BALANCE_ARM_LIMIT_DEG);
+
+    s_led1_fast_until_tick = control_tick_count() + LED_REFUSED_TICKS;
 
     return false;
+}
+
+/* Once per READY entry: the angle S1 would start from (e.g. resting on its support). */
+static HAL_NOINLINE void report_ready (float angle_deg)
+{
+    decimal2_t angle_dec;
+    split_decimal2(angle_deg, &angle_dec);
+
+    telemetry_printf("READY: angle=%s%d.%02u deg - S1 stands it up from within +/-%d deg "
+                     "(resting on its support is fine)\r\n",
+                     angle_dec.p_sign, angle_dec.int_part, angle_dec.frac_part, (int) BALANCE_ARM_LIMIT_DEG);
+}
+
+static HAL_NOINLINE void report_standup_done (float angle_deg)
+{
+    decimal2_t angle_dec;
+    split_decimal2(angle_deg, &angle_dec);
+
+    telemetry_printf("stand-up window over (2 s): angle=%s%d.%02u deg, tilt cut-out now +/-%d deg\r\n",
+                     angle_dec.p_sign, angle_dec.int_part, angle_dec.frac_part, (int) SAFETY_TILT_LIMIT_DEG);
+}
+
+/* Leaving ACTIVE: freeze the black box with why the run ended. */
+static HAL_NOINLINE void freeze_blackbox (safety_state_t safety_state)
+{
+    uint32_t const    faults = safety_get_fault_reasons();
+    blackbox_reason_t reason;
+
+    if (SAFETY_STATE_FAULT != safety_state)
+    {
+        reason = BLACKBOX_REASON_S1; /* S1 is the only way to disarm in this build. */
+    }
+    else if (0U != (faults & SAFETY_FAULT_TILT))
+    {
+        reason = BLACKBOX_REASON_TILT;
+    }
+    else
+    {
+        reason = BLACKBOX_REASON_FAULT;
+    }
+
+    blackbox_freeze(reason, faults);
 }
 #endif
 
@@ -264,7 +303,7 @@ static HAL_NOINLINE void handle_pending_arm (float angle_deg)
         /* Faulted again during the settle window (e.g. still tilted past
          * the limit): don't arm later by surprise. */
         s_arm_pending = false;
-        telemetry_printf("not standing up: fault again (faults=0x%x) - set it on its stand and press S1\r\n",
+        telemetry_printf("not standing up: fault again (faults=0x%x) - press S1 again\r\n",
                          (unsigned) safety_get_fault_reasons());
     }
     else
@@ -291,9 +330,11 @@ static HAL_NOINLINE void handle_button_press (safety_state_t safety_state, float
             (void) angle_deg;
             safety_request_active();
 #else
-            /* As stock: set it on the floor (resting on its stand is fine) and
-             * press S1 - the law runs from any angle inside the arming window,
-             * so from rest the angle term saturates and kicks it upright. */
+            /* As stock: set it on the floor (resting on its support is fine)
+             * and press S1 - the law runs from any |angle| up to
+             * BALANCE_ARM_LIMIT_DEG, the cut-out is skipped for 2 s
+             * (SAFETY_STANDUP_*), and from rest the angle term saturates
+             * and kicks it upright. */
             if (try_arm(angle_deg))
             {
                 report_arm(angle_deg);
@@ -725,6 +766,7 @@ void hal_entry (void)
     fault_init();
 
     telemetry_init();
+    telemetry_printf("build id: %s\r\n", g_build_id);
 
     {
         uint32_t const fpccr = fault_get_fpccr();
@@ -781,6 +823,9 @@ void hal_entry (void)
         fault_halt(&leds, "button", err);
     }
 
+    /* What survived the reset - before anything can start a new recording. */
+    blackbox_init();
+
     /* Before the tick starts: the first IMU sample after control_tick_init()
      * already calls balance_step(). */
     balance_init();
@@ -800,20 +845,21 @@ void hal_entry (void)
 #ifdef MOTOR_BENCH_TEST
     telemetry_printf("build: MOTOR_BENCH_TEST - S1 runs the bench sequence, balancing is off\r\n");
 #else
-    telemetry_printf("build: balance (stock ELEGOO law). Set it on the floor (resting is fine), press S1: "
-                     "it stands up and balances. S1 again disarms. After a fall: set it down, press S1 once.\r\n");
+    telemetry_printf("build: balance (stock ELEGOO law). Set it on the floor (resting on its support is fine), "
+                     "press S1: it stands up and balances. S1 again disarms. After a fall: press S1 once.\r\n");
+    telemetry_printf("start: S1 arms within +/-%d deg; cut-out +/-%d deg for the first 2 s (stand-up), then +/-%d deg\r\n",
+                     (int) BALANCE_ARM_LIMIT_DEG, (int) SAFETY_STANDUP_TILT_LIMIT_DEG, (int) SAFETY_TILT_LIMIT_DEG);
     print_conventions();
     console_print_mode();
 #endif
     console_print_params();
     console_print_speed_loop();
 
-    bsp_io_level_t led1_level              = BSP_IO_LEVEL_LOW;
+    bsp_io_level_t led1_last_written       = BSP_IO_LEVEL_LOW;
     bsp_io_level_t led2_last_written       = BSP_IO_LEVEL_LOW;
     bsp_io_level_t led2_blink_phase        = BSP_IO_LEVEL_LOW;
     uint32_t       last_tick_seen          = 0U;
     uint32_t       last_button_press_count = 0U;
-    uint32_t       next_blink_tick         = LED_BLINK_TICKS;
     uint32_t       next_led2_blink_tick    = LED_BLINK_TICKS;
     uint32_t       next_csv_tick           = CSV_REPORT_TICKS;
     uint32_t       next_sensor_report_tick = SENSOR_REPORT_TICKS;
@@ -822,6 +868,7 @@ void hal_entry (void)
     uint32_t       window_start_cyccnt     = DWT->CYCCNT;
 #ifndef MOTOR_BENCH_TEST
     safety_state_t prev_safety_state       = SAFETY_STATE_INIT;
+    bool           prev_standup            = false;
 #endif
 
     while (1)
@@ -871,25 +918,47 @@ void hal_entry (void)
         }
         else if ((SAFETY_STATE_ACTIVE != safety_state) && (SAFETY_STATE_ACTIVE == prev_safety_state))
         {
+            freeze_blackbox(safety_state);
             report_disarmed(safety_state);
+        }
+        else if ((SAFETY_STATE_READY == safety_state) && (SAFETY_STATE_READY != prev_safety_state))
+        {
+            report_ready(angle.filtered_angle_deg);
         }
         else
         {
             /* No transition. */
         }
 
+        bool const standup = safety_in_standup();
+
+        if (prev_standup && (!standup) && (SAFETY_STATE_ACTIVE == safety_state))
+        {
+            report_standup_done(angle.filtered_angle_deg);
+        }
+
+        prev_standup      = standup;
         prev_safety_state = safety_state;
 #endif
 
-        if (tick >= next_blink_tick)
+        /* LED1: 1 Hz heartbeat; 10 Hz for 2 s after S1 was refused (angle beyond the arming limit). */
         {
-            next_blink_tick += LED_BLINK_TICKS;
+#ifndef MOTOR_BENCH_TEST
+            bool const refused = ((int32_t) (s_led1_fast_until_tick - tick)) > 0;
+#else
+            bool const refused = false;
+#endif
+            uint32_t const       half_period  = refused ? LED_FAST_BLINK_TICKS : LED_BLINK_TICKS;
+            bsp_io_level_t const led1_desired = (0U != ((tick / half_period) & 1U)) ? BSP_IO_LEVEL_HIGH : BSP_IO_LEVEL_LOW;
 
-            led1_level = (BSP_IO_LEVEL_LOW == led1_level) ? BSP_IO_LEVEL_HIGH : BSP_IO_LEVEL_LOW;
+            if (led1_desired != led1_last_written)
+            {
+                led1_last_written = led1_desired;
 
-            R_BSP_PinAccessEnable();
-            R_BSP_PinWrite((bsp_io_port_pin_t) leds.p_leds[0], led1_level);
-            R_BSP_PinAccessDisable();
+                R_BSP_PinAccessEnable();
+                R_BSP_PinWrite((bsp_io_port_pin_t) leds.p_leds[0], led1_desired);
+                R_BSP_PinAccessDisable();
+            }
         }
 
         /* LED2: on=FAULT, blinking=ACTIVE, off otherwise (READY/INIT/CALIBRATING). */
@@ -931,6 +1000,7 @@ void hal_entry (void)
         }
 
         console_poll();
+        blackbox_dump_poll();
 
         /* Armed (balance law running, live or dry-run): the combined line
          * and the CSV replace the separate sensor/IMU lines. */

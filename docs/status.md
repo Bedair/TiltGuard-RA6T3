@@ -1,4 +1,81 @@
-# TiltGuard status report (read-only audit)
+# TiltGuard status
+
+## Milestones
+
+### 2026-11-15: first successful floor balance
+
+**What was seen** (from a 34 s hand-held video; no RTT log was captured, so no
+angles, oscillation, saturation or fault data exist for this run):
+- Released on the wood floor, not held. It stayed upright, unsupported, for the
+  whole 34 s clip, with no fall and no visible FAULT.
+- Poked about 8 times. It leaned visibly each time and recovered, including the
+  largest lean (t ≈ 21–25 s), which showed the wheels and side plate from above.
+- It stayed roughly in the same area. Drift couldn't be measured (handheld camera).
+- Hardware: FPB-RA6T3 + ElectroCookie terminal shield mounted on top of the
+  robot; some loose wire loops over the top.
+- **Start-up differed from stock:** from rest on its support, it did not stand
+  up. It was held near vertical and then S1 armed it. See "Start from rest" below.
+
+**Build that balanced.** `git status` was clean on `main` at
+`46ac052` ("Balance logic", 2026-11-15 14:06 +0100) when this was recorded,
+and nothing had changed since that commit. That build had no build ID, so it
+can't be proven the flashed image came from exactly this tree; from now on the
+boot banner prints `build id: <hash>[-dirty] <date> <time>` (see below).
+
+Boot defaults in `46ac052` (read from the tree with `git show`, not from memory):
+
+| Item | Value | Where |
+|---|---|---|
+| kp | 55 (8-bit PWM per deg) | `BALANCE_KP_DEFAULT` |
+| kd | 0.75 (per deg/s) | `BALANCE_KD_DEFAULT` |
+| sp (setpoint) | 0.0 deg | `BALANCE_SETPOINT_DEG_DEFAULT` |
+| skp | 10 | `BALANCE_SPEED_KP_DEFAULT` |
+| ski | 0.26 | `BALANCE_SPEED_KI_DEFAULT` |
+| tkd | 0.5 | `BALANCE_TURN_KD_DEFAULT` |
+| Speed loop | **ON** (`BALANCE_SPEED_LOOP_OFF` commented out) | `balance.h` |
+| Speed-loop soft start | held at 0 for 0.5 s after arm, then 1 s linear ramp | `BALANCE_SPEED_START_*` |
+| Speed-loop anti-windup | integral frozen while both wheels saturate in its direction | `balance.c` |
+| Dry-run at boot | off (motors live) | `BALANCE_DRY_RUN_AT_BOOT` |
+| Angle filter | complementary, time constant 1 s at 1 kHz | `mpu6050.c` |
+| Arming window | \|angle − sp\| < 22 deg | `BALANCE_ARM_WINDOW_DEG` |
+| Tilt cut-out | \|angle\| > 25 deg → FAULT, **in every state** (also READY) | `SAFETY_TILT_LIMIT_DEG` |
+
+These are the stock ELEGOO gains and units (see `firmware/src/control/balance.h`).
+Any console changes made before the run aren't known; the recorder below now
+stores the live values with every run.
+
+**Start from rest: why it didn't stand up (facts, not a guess).**
+- Stock (`Tumbller_Code_20191012`): `motion_mode` starts as `START`
+  (`mode.h: } motion_mode = START;`). In `balanceCar()` the ±22° cut-out is
+  skipped in START: `if (motion_mode != START && motion_mode != STOP &&
+  (kalmanfilter_angle < balance_angle_min || balance_angle_max < kalmanfilter_angle))`
+  with `balance_angle_min = -22; balance_angle_max = 22;`. In `loop()`,
+  `case START: if (millis() - start_prev_time > 2000) { if (-22 <= angle <= 22)
+  { car_speed_integeral = 0; motion_mode = STANDBY; } else { motion_mode = STOP; ... } }`.
+  So stock drives the law at **any angle for the first 2 s** after power-on; from
+  rest the angle term saturates (55 × 20° ≫ 255) and the wheels kick it upright.
+  There is no arming window and no separate stand-up routine.
+- Ours (`46ac052`): S1 armed only if |angle − sp| < **22°** (not ±10° as
+  suspected), and the safety monitor latched a tilt FAULT whenever |angle| > **25°**,
+  even in READY with the motors off. The resting angle on the support was
+  −18.6° and −21.1° in the 2026-11-14 boot logs, i.e. right at the 22° edge, so
+  depending on surface and how it settled S1 was either refused, or it armed and
+  any excursion past 25° during the kick latched FAULT. Without a log it can't
+  be told which; the refusal printed only on RTT, with no LED cue.
+- Fix (this change): S1 arms from any |angle| ≤ 40°; for the first 2 s after arming
+  the cut-out is ±45° (stock: none), then ±25° as before; the tilt check runs only
+  while ACTIVE. A refused S1 prints `arm refused: angle=<x>, limit=+/-40 deg` and
+  blinks LED1 at 10 Hz for 2 s. Every READY entry prints `READY: angle=<x>`, so the
+  resting angle (on the support, and on its back if it can rest there) can be read
+  off the log. **Not yet confirmed on hardware.**
+
+**Added in the same change** (not yet confirmed on hardware): build ID in the boot
+banner, the black-box recorder (`dump` / `tools/telemetry/dump.py`), the stand-up
+start above, and the ElectroCookie wiring table in `docs/wiring.md`.
+
+---
+
+# Status report (read-only audit, 2026-11-08)
 
 Generated 2026-11-08 by inspecting `configuration.xml`, `ra_gen/`, `src/`, and a real
 build/link — not by reading `CLAUDE.md` or `docs/`. Where those docs differ from what's
